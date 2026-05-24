@@ -80,7 +80,6 @@ script:
             - unknown
             - unavailable
             - ""
-            - "None"
             - Select Exercise
           no_exercise_selected: >
             {{ active_exercise in invalid_exercise_values }}
@@ -96,11 +95,12 @@ script:
                 | map('lower')
                 | map('replace', ' ', '_')
                 | list }}
-          set_number_entity: "{{ 'input_number.fitness_set_number_' ~ exercise_key if exercise_key in valid_exercises and not no_exercise_selected else none }}"
-          lifetime_set_count_entity: "{{ 'input_number.fitness_lifetime_set_count_' ~ exercise_key if exercise_key in valid_exercises and not no_exercise_selected else none }}"
-          last_set_entity: "{{ 'input_text.fitness_last_set_' ~ exercise_key if exercise_key in valid_exercises else none }}"
-          total_volume_entity: "{{ 'input_number.fitness_total_volume_' ~ exercise_key if exercise_key in valid_exercises else none }}"
-          pr_entity: "{{ 'input_number.fitness_pr_' ~ exercise_key if exercise_key in valid_exercises else none }}"
+          exercise_is_valid: "{{ exercise_key in valid_exercises and not no_exercise_selected }}"
+          set_number_entity: "{{ 'input_number.fitness_set_number_' ~ exercise_key if exercise_is_valid else none }}"
+          lifetime_set_count_entity: "{{ 'input_number.fitness_lifetime_set_count_' ~ exercise_key if exercise_is_valid else none }}"
+          last_set_entity: "{{ 'input_text.fitness_last_set_' ~ exercise_key if exercise_is_valid else none }}"
+          total_volume_entity: "{{ 'input_number.fitness_total_volume_' ~ exercise_key if exercise_is_valid else none }}"
+          pr_entity: "{{ 'input_number.fitness_pr_' ~ exercise_key if exercise_is_valid else none }}"
           entities_ready: >
             {{ set_number_entity is not none
                and lifetime_set_count_entity is not none
