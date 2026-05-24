@@ -1,10 +1,88 @@
 script:
+  fitness_start_workout:
+    alias: Fitness Start Workout
+    mode: single
+    sequence:
+      - variables:
+          exercises: "{{ state_attr('sensor.fitness_metadata_exercises', 'exercises') | default({}, true) }}"
+      - service: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.fitness_workout_active
+      - service: input_text.set_value
+        target:
+          entity_id: input_text.fitness_set_notes
+        data:
+          value: ""
+      - service: input_select.select_option
+        target:
+          entity_id: input_select.fitness_active_exercise
+        data:
+          option: Select Exercise
+      - service: timer.cancel
+        target:
+          entity_id: timer.fitness_rest_timer
+      - repeat:
+          for_each: "{{ exercises.keys() | list }}"
+          sequence:
+            - variables:
+                set_number_entity: "{{ 'input_number.fitness_set_number_' ~ repeat.item }}"
+            - choose:
+                - conditions:
+                    - condition: template
+                      value_template: "{{ states(set_number_entity) not in ['unknown', 'unavailable'] }}"
+                  sequence:
+                    - service: input_number.set_value
+                      target:
+                        entity_id: "{{ set_number_entity }}"
+                      data:
+                        value: 0
+              default:
+                - service: logbook.log
+                  data:
+                    name: Fitness Workout
+                    entity_id: input_boolean.fitness_workout_active
+                    message: "Could not reset current set counter because entity is missing or unavailable: {{ set_number_entity }}"
+      - service: logbook.log
+        data:
+          name: Fitness Workout
+          entity_id: input_boolean.fitness_workout_active
+          message: Workout started. Current set counters reset.
+
+  fitness_finish_workout:
+    alias: Fitness Finish Workout
+    mode: single
+    sequence:
+      - service: timer.cancel
+        target:
+          entity_id: timer.fitness_rest_timer
+      - service: input_select.select_option
+        target:
+          entity_id: input_select.fitness_active_exercise
+        data:
+          option: Select Exercise
+      - service: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.fitness_workout_active
+      - service: logbook.log
+        data:
+          name: Fitness Workout
+          entity_id: input_boolean.fitness_workout_active
+          message: Workout finished. Timer stopped and active exercise cleared.
+
   fitness_save_set:
     alias: Fitness Save Set
     mode: queued
     sequence:
       - variables:
+          workout_active: "{{ is_state('input_boolean.fitness_workout_active', 'on') }}"
           active_exercise: "{{ states('input_select.fitness_active_exercise') }}"
+          invalid_exercise_values:
+            - unknown
+            - unavailable
+            - ""
+            - Select Exercise
+          no_exercise_selected: >
+            {{ active_exercise in invalid_exercise_values }}
           exercise_key: "{{ active_exercise | lower | replace(' ', '_') }}"
           weight: "{{ states('input_number.fitness_input_weight') | float(0) }}"
           reps: "{{ states('input_number.fitness_input_reps') | int(0) }}"
@@ -13,25 +91,93 @@ script:
           valid_exercises: >
             {{ state_attr('input_select.fitness_active_exercise', 'options')
                 | default([], true)
+                | reject('equalto', 'Select Exercise')
                 | map('lower')
                 | map('replace', ' ', '_')
                 | list }}
-          set_number_entity: "{{ 'input_number.fitness_set_number_' ~ exercise_key if exercise_key in valid_exercises else none }}"
-          last_set_entity: "{{ 'input_text.fitness_last_set_' ~ exercise_key if exercise_key in valid_exercises else none }}"
-          total_volume_entity: "{{ 'input_number.fitness_total_volume_' ~ exercise_key if exercise_key in valid_exercises else none }}"
-          pr_entity: "{{ 'input_number.fitness_pr_' ~ exercise_key if exercise_key in valid_exercises else none }}"
+          exercise_is_valid: "{{ exercise_key in valid_exercises and not no_exercise_selected }}"
+          set_number_entity: "{{ 'input_number.fitness_set_number_' ~ exercise_key if exercise_is_valid else none }}"
+          lifetime_set_count_entity: "{{ 'input_number.fitness_lifetime_set_count_' ~ exercise_key if exercise_is_valid else none }}"
+          last_set_entity: "{{ 'input_text.fitness_last_set_' ~ exercise_key if exercise_is_valid else none }}"
+          total_volume_entity: "{{ 'input_number.fitness_total_volume_' ~ exercise_key if exercise_is_valid else none }}"
+          pr_entity: "{{ 'input_number.fitness_pr_' ~ exercise_key if exercise_is_valid else none }}"
+          entities_ready: >
+            {{ set_number_entity is not none
+               and lifetime_set_count_entity is not none
+               and last_set_entity is not none
+               and total_volume_entity is not none
+               and pr_entity is not none
+               and states(set_number_entity) not in ['unknown', 'unavailable']
+               and states(lifetime_set_count_entity) not in ['unknown', 'unavailable']
+               and states(last_set_entity) not in ['unknown', 'unavailable']
+               and states(total_volume_entity) not in ['unknown', 'unavailable']
+               and states(pr_entity) not in ['unknown', 'unavailable'] }}
       - choose:
           - conditions:
               - condition: template
-                value_template: >
-                  {{ set_number_entity is not none
-                     and states(set_number_entity) not in ['unknown', 'unavailable']
-                     and states(last_set_entity) not in ['unknown', 'unavailable']
-                     and states(total_volume_entity) not in ['unknown', 'unavailable']
-                     and states(pr_entity) not in ['unknown', 'unavailable'] }}
+                value_template: "{{ not workout_active }}"
+            sequence:
+              - service: persistent_notification.create
+                data:
+                  notification_id: fitness_save_set_error
+                  title: Fitness Save Set Failed
+                  message: Unable to save set because no workout is currently active.
+              - service: logbook.log
+                data:
+                  name: Fitness Workout
+                  entity_id: input_boolean.fitness_workout_active
+                  message: Unable to save set. No active workout.
+          - conditions:
+              - condition: template
+                value_template: "{{ no_exercise_selected }}"
+            sequence:
+              - service: persistent_notification.create
+                data:
+                  notification_id: fitness_save_set_error
+                  title: Fitness Save Set Failed
+                  message: Unable to save set because no exercise is selected.
+              - service: logbook.log
+                data:
+                  name: Fitness Workout
+                  entity_id: input_select.fitness_active_exercise
+                  message: Unable to save set. No exercise selected.
+          - conditions:
+              - condition: template
+                value_template: "{{ weight <= 0 or reps <= 0 }}"
+            sequence:
+              - service: persistent_notification.create
+                data:
+                  notification_id: fitness_save_set_error
+                  title: Fitness Save Set Failed
+                  message: "Unable to save set. Weight and reps must both be greater than zero (received {{ weight }} {{ weight_unit }}, {{ reps }} reps)."
+              - service: logbook.log
+                data:
+                  name: Fitness Workout
+                  entity_id: input_select.fitness_active_exercise
+                  message: "Unable to save set. Invalid inputs: {{ reps }} reps @ {{ weight }} {{ weight_unit }}."
+          - conditions:
+              - condition: template
+                value_template: "{{ not entities_ready }}"
+            sequence:
+              - service: persistent_notification.create
+                data:
+                  notification_id: fitness_save_set_error
+                  title: Fitness Save Set Failed
+                  message: >
+                    Unable to save set because one or more required entities are missing or unavailable
+                    for exercise "{{ active_exercise }}".
+              - service: logbook.log
+                data:
+                  name: Fitness Workout
+                  entity_id: input_select.fitness_active_exercise
+                  message: "Unable to save set. Missing or unavailable entities for exercise: {{ active_exercise }}."
+          - conditions:
+              - condition: template
+                value_template: "{{ entities_ready }}"
             sequence:
               - variables:
                   next_set_number: "{{ states(set_number_entity) | int(0) + 1 }}"
+                  next_lifetime_set_count: "{{ states(lifetime_set_count_entity) | int(0) + 1 }}"
                   new_total_volume: "{{ (states(total_volume_entity) | float(0) + volume) | round(2) }}"
                   current_pr: "{{ states(pr_entity) | float(0) }}"
                   set_summary: "Set {{ next_set_number }}: {{ reps }} reps @ {{ weight }} {{ weight_unit }} ({{ volume }} {{ weight_unit }})"
@@ -40,6 +186,11 @@ script:
                   entity_id: "{{ set_number_entity }}"
                 data:
                   value: "{{ next_set_number }}"
+              - service: input_number.set_value
+                target:
+                  entity_id: "{{ lifetime_set_count_entity }}"
+                data:
+                  value: "{{ next_lifetime_set_count }}"
               - service: input_text.set_value
                 target:
                   entity_id: "{{ last_set_entity }}"
@@ -68,23 +219,3 @@ script:
                   name: Fitness Workout
                   entity_id: input_select.fitness_active_exercise
                   message: "{{ active_exercise }} - {{ set_summary }}"
-        default:
-          - service: logbook.log
-            data:
-              name: Fitness Workout
-              entity_id: input_select.fitness_active_exercise
-              message: "Unable to save set. Unknown exercise: {{ active_exercise }}"
-
-automation:
-  - alias: Fitness Workout Start Clears Notes
-    id: fitness_workout_start_clears_notes
-    trigger:
-      - platform: state
-        entity_id: input_boolean.fitness_workout_active
-        to: "on"
-    action:
-      - service: input_text.set_value
-        target:
-          entity_id: input_text.fitness_set_notes
-        data:
-          value: ""
