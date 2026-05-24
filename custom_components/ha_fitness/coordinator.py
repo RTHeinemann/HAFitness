@@ -143,24 +143,22 @@ class HAFitnessCoordinator:
 
         Raises HomeAssistantError if validation fails.
         """
-        errors: list[str] = []
-
-        if self._workout_state != STATE_ACTIVE:
-            errors.append("No active workout. Press Start Workout first.")
-        if not self._active_exercise:
-            errors.append("No exercise selected.")
-        if self._weight <= 0:
-            errors.append("Weight must be greater than 0.")
-        if self._reps <= 0:
-            errors.append("Reps must be greater than 0.")
+        errors = self._validate_set_inputs(
+            exercise=self._active_exercise,
+            weight=self._weight,
+            reps=self._reps,
+            require_active_workout=True,
+        )
 
         if errors:
             message = " ".join(errors)
             _LOGGER.warning("HA Fitness save_current_set validation failed: %s", message)
-            self.hass.components.persistent_notification.async_create(
-                message=f"Cannot save set: {message}",
-                title="HA Fitness – Save Set",
-                notification_id="ha_fitness_save_set_error",
+            self.hass.async_create_task(
+                self.hass.components.persistent_notification.async_create(
+                    message=f"Cannot save set: {message}",
+                    title="HA Fitness – Save Set",
+                    notification_id="ha_fitness_save_set_error",
+                )
             )
             raise HomeAssistantError(message)
 
@@ -182,26 +180,50 @@ class HAFitnessCoordinator:
 
         Raises HomeAssistantError if validation fails.
         """
-        errors: list[str] = []
-
-        if not exercise:
-            errors.append("Exercise must not be empty.")
-        if weight <= 0:
-            errors.append("Weight must be greater than 0.")
-        if reps <= 0:
-            errors.append("Reps must be greater than 0.")
+        errors = self._validate_set_inputs(
+            exercise=exercise,
+            weight=weight,
+            reps=reps,
+            require_active_workout=False,
+        )
 
         if errors:
             message = " ".join(errors)
             _LOGGER.warning("HA Fitness save_set validation failed: %s", message)
-            self.hass.components.persistent_notification.async_create(
-                message=f"Cannot save set: {message}",
-                title="HA Fitness – Save Set",
-                notification_id="ha_fitness_save_set_error",
+            self.hass.async_create_task(
+                self.hass.components.persistent_notification.async_create(
+                    message=f"Cannot save set: {message}",
+                    title="HA Fitness – Save Set",
+                    notification_id="ha_fitness_save_set_error",
+                )
             )
             raise HomeAssistantError(message)
 
         self._do_save_set(exercise=exercise, weight=weight, reps=reps, notes=notes)
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _validate_set_inputs(
+        self,
+        exercise: str | None,
+        weight: float,
+        reps: int,
+        *,
+        require_active_workout: bool,
+    ) -> list[str]:
+        """Return a list of validation error messages (empty means valid)."""
+        errors: list[str] = []
+        if require_active_workout and self._workout_state != STATE_ACTIVE:
+            errors.append("No active workout. Press Start Workout first.")
+        if not exercise:
+            errors.append("No exercise selected.")
+        if weight <= 0:
+            errors.append("Weight must be greater than 0.")
+        if reps <= 0:
+            errors.append("Reps must be greater than 0.")
+        return errors
 
     def _do_save_set(
         self,
