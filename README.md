@@ -23,6 +23,33 @@ Build a local-first, privacy-first fitness subsystem for Home Assistant with:
 - Long-term maintainable
 - Multi-user-ready architecture (even during MVP)
 
+## Installation
+
+### Option 1 – HACS Custom Integration (recommended going forward)
+
+1. Add this repository as a custom HACS repository (category: **Integration**):
+   ```
+   https://github.com/RTHeinemann/HAFitness
+   ```
+2. Download **HA Fitness Tracker** from HACS and restart Home Assistant.
+3. Go to **Settings → Devices & Services → Add Integration** and search for **HA Fitness Tracker**.
+
+> ⚠️ The HACS integration is currently a scaffold.
+> The YAML packages below remain the more feature-complete prototype until native entity migration is complete.
+
+See [`docs/HACS_INSTALLATION.md`](docs/HACS_INSTALLATION.md) for full details.
+
+### Option 2 – YAML Prototype (legacy / feature-complete prototype)
+
+1. Copy package files from `/packages` into your Home Assistant `packages` setup.
+2. Include dashboard YAML from `/dashboards` in Lovelace.
+3. Adapt exercise metadata in `/examples/exercise_metadata.yaml`.
+4. Validate entity naming uses `fitness_*` prefix.
+
+See [`docs/DEVELOPMENT_SETUP.md`](docs/DEVELOPMENT_SETUP.md) for a complete setup flow.
+
+---
+
 ## Current Phase
 
 This repository provides **Phase 1.5 (YAML MVP+)** with:
@@ -39,23 +66,14 @@ This repository provides **Phase 1.5 (YAML MVP+)** with:
 
 ## Repository Structure
 
-- `/packages` - Home Assistant package YAML modules
+- `/packages` - Home Assistant package YAML modules (YAML prototype)
 - `/dashboards` - Lovelace dashboards and chart examples
-- `/custom_components` - future native integration placeholder
+- `/custom_components/ha_fitness` - HACS-installable native integration
 - `/docs` - architecture, roadmap, workflows, migration docs
 - `/examples` - metadata models and config examples
 - `/scripts` - helper scripts placeholder
 - `/sqlite` - future backend notes
 - `/assets` - static assets placeholder
-
-## Quick Start (Phase 1.5)
-
-1. Copy package files from `/packages` into your Home Assistant `packages` setup.
-2. Include dashboard YAML from `/dashboards` in Lovelace.
-3. Adapt exercise metadata in `/examples/exercise_metadata.yaml`.
-4. Validate entity naming uses `fitness_*` prefix.
-
-See `/docs/DEVELOPMENT_SETUP.md` for a complete setup flow.
 
 ## Multi-User Direction
 
@@ -87,6 +105,8 @@ Planned model fields:
 - [`docs/WORKOUT_UX.md`](docs/WORKOUT_UX.md)
 - [`docs/SQLITE_MIGRATION.md`](docs/SQLITE_MIGRATION.md)
 - [`docs/HACS_PREPARATION.md`](docs/HACS_PREPARATION.md)
+- [`docs/HACS_INSTALLATION.md`](docs/HACS_INSTALLATION.md)
+- [`docs/MIGRATION_FROM_YAML_TO_INTEGRATION.md`](docs/MIGRATION_FROM_YAML_TO_INTEGRATION.md)
 - [`docs/DEVELOPMENT_SETUP.md`](docs/DEVELOPMENT_SETUP.md)
 
 ## Contribution
