@@ -3,6 +3,8 @@ script:
     alias: Fitness Start Workout
     mode: single
     sequence:
+      - variables:
+          exercises: "{{ state_attr('sensor.fitness_metadata_exercises', 'exercises') | default({}, true) }}"
       - service: input_boolean.turn_on
         target:
           entity_id: input_boolean.fitness_workout_active
@@ -19,19 +21,14 @@ script:
       - service: timer.cancel
         target:
           entity_id: timer.fitness_rest_timer
-      - service: input_number.set_value
-        target:
-          entity_id:
-            - input_number.fitness_set_number_bench_press
-            - input_number.fitness_set_number_squat
-            - input_number.fitness_set_number_deadlift
-            - input_number.fitness_set_number_shoulder_press
-            - input_number.fitness_set_number_row
-            - input_number.fitness_set_number_lat_pulldown
-            - input_number.fitness_set_number_bicep_curl
-            - input_number.fitness_set_number_tricep_pushdown
-        data:
-          value: 0
+      - repeat:
+          for_each: "{{ exercises.keys() | list }}"
+          sequence:
+            - service: input_number.set_value
+              target:
+                entity_id: "{{ 'input_number.fitness_set_number_' ~ repeat.item }}"
+              data:
+                value: 0
       - service: logbook.log
         data:
           name: Fitness Workout
