@@ -14,6 +14,8 @@ STATE_ACTIVE = "active"
 SERVICE_START_WORKOUT = "start_workout"
 SERVICE_FINISH_WORKOUT = "finish_workout"
 SERVICE_SAVE_SET = "save_set"
+SERVICE_REFRESH_STATISTICS = "refresh_statistics"
+SERVICE_EXPORT_DATA = "export_data"
 
 # Service field names
 ATTR_EXERCISE = "exercise"

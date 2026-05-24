@@ -37,6 +37,10 @@ After setup, Home Assistant will create:
 | `sensor.ha_fitness_last_set` | Summary of the last saved set |
 | `sensor.ha_fitness_current_set_volume` | Weight × reps for current set inputs |
 | `sensor.ha_fitness_active_workout_summary` | Full workout state with attributes |
+| `sensor.ha_fitness_total_volume` | Persisted total training volume (kg) |
+| `sensor.ha_fitness_total_sets` | Persisted total set count |
+| `sensor.ha_fitness_total_workouts` | Persisted total workout count |
+| `sensor.ha_fitness_recent_sets` | Recent set list in attributes |
 | `button.ha_fitness_start_workout` | Starts a workout session |
 | `button.ha_fitness_finish_workout` | Finishes a workout session |
 | `button.ha_fitness_save_set` | Saves the current set using active inputs |
@@ -58,6 +62,14 @@ The integration supports a minimal native workout flow:
 7. **See Results** – Check `sensor.ha_fitness_last_set` and `sensor.ha_fitness_active_workout_summary`
 8. **Finish Workout** – Press `button.ha_fitness_finish_workout`
 
+## SQLite Storage
+
+- HACS installs only integration code.
+- Runtime data is stored in:
+  - `/config/ha_fitness/ha_fitness.db`
+- The integration creates the folder/file automatically on startup.
+- Data survives Home Assistant restarts, HACS updates, and integration re-installs.
+
 ## Available Services
 
 Call these from **Developer Tools → Services**:
@@ -66,7 +78,9 @@ Call these from **Developer Tools → Services**:
 |---------|-------------|
 | `ha_fitness.start_workout` | Transitions status to `active` |
 | `ha_fitness.finish_workout` | Transitions status to `ready` |
-| `ha_fitness.save_set` | Logs a set (exercise, weight, reps, optional notes) |
+| `ha_fitness.save_set` | Logs a set (exercise, weight, reps, optional notes); if inactive, creates and auto-finishes an implicit workout |
+| `ha_fitness.refresh_statistics` | Reloads cached totals/PR/recent sets from SQLite |
+| `ha_fitness.export_data` | Writes export JSON to `/config/ha_fitness/export.json` |
 
 ### Example: save_set
 
@@ -89,13 +103,7 @@ A ready-made native dashboard is available at
 
 ## Current Limitations
 
-> ⚠️ Phase 1.7 implements the minimal native workout flow.
->
-> - No persistence across HA restart yet — state resets on restart.
-> - No per-exercise PR tracking yet.
-> - No workout volume history yet.
-> - No SQLite storage yet.
-> - YAML packages in `/packages` remain more feature-complete for analytics.
+- Native history views are currently limited to aggregate sensors plus `sensor.ha_fitness_recent_sets`.
+- Advanced charts/cards are still provided mainly by YAML examples.
 
 See [MIGRATION_FROM_YAML_TO_INTEGRATION.md](MIGRATION_FROM_YAML_TO_INTEGRATION.md) for the migration roadmap.
-

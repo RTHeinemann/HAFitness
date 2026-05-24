@@ -1,13 +1,14 @@
 """Sensor platform for HA Fitness Tracker."""
 from __future__ import annotations
 
-from homeassistant.components.sensor import SensorEntity
+from homeassistant.components.sensor import SensorEntity, SensorStateClass
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import UnitOfMass
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN, STATE_ACTIVE
+from .const import DOMAIN, EXERCISES, STATE_ACTIVE
 from .coordinator import HAFitnessCoordinator
 
 
@@ -18,16 +19,24 @@ async def async_setup_entry(
 ) -> None:
     """Set up HA Fitness sensors from a config entry."""
     coordinator: HAFitnessCoordinator = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities(
-        [
-            HAFitnessStatusSensor(coordinator, entry),
-            HAFitnessActiveExerciseSensor(coordinator, entry),
-            HAFitnessCurrentSetNumberSensor(coordinator, entry),
-            HAFitnessLastSetSensor(coordinator, entry),
-            HAFitnessCurrentSetVolumeSensor(coordinator, entry),
-            HAFitnessActiveWorkoutSummarySensor(coordinator, entry),
-        ]
-    )
+    entities: list[SensorEntity] = [
+        HAFitnessStatusSensor(coordinator, entry),
+        HAFitnessActiveExerciseSensor(coordinator, entry),
+        HAFitnessCurrentSetNumberSensor(coordinator, entry),
+        HAFitnessLastSetSensor(coordinator, entry),
+        HAFitnessCurrentSetVolumeSensor(coordinator, entry),
+        HAFitnessActiveWorkoutSummarySensor(coordinator, entry),
+        HAFitnessTotalVolumeSensor(coordinator, entry),
+        HAFitnessTotalSetsSensor(coordinator, entry),
+        HAFitnessTotalWorkoutsSensor(coordinator, entry),
+        HAFitnessRecentSetsSensor(coordinator, entry),
+    ]
+
+    for exercise in EXERCISES:
+        entities.append(HAFitnessPRByExerciseSensor(coordinator, entry, exercise))
+        entities.append(HAFitnessVolumeByExerciseSensor(coordinator, entry, exercise))
+
+    async_add_entities(entities)
 
 
 class _HAFitnessSensorBase(SensorEntity):
@@ -139,7 +148,7 @@ class HAFitnessCurrentSetVolumeSensor(_HAFitnessSensorBase):
 
 
 class HAFitnessActiveWorkoutSummarySensor(_HAFitnessSensorBase):
-    """Sensor providing a full summary of the active workout state."""
+    """Sensor providing a summary of the active workout state."""
 
     _attr_translation_key = "active_workout_summary"
 
@@ -161,6 +170,8 @@ class HAFitnessActiveWorkoutSummarySensor(_HAFitnessSensorBase):
         coord = self._coordinator
         return {
             "workout_state": coord.workout_state,
+            "current_workout_id": coord.current_workout_id,
+            "current_workout_started_at": coord.current_workout_started_at,
             "active_exercise": coord.active_exercise,
             "weight": coord.weight,
             "reps": coord.reps,
@@ -168,5 +179,128 @@ class HAFitnessActiveWorkoutSummarySensor(_HAFitnessSensorBase):
             "current_set_number": coord.current_set_number,
             "current_set_volume": coord.weight * coord.reps,
             "last_set_summary": coord.last_set_summary,
+            "total_volume": coord.total_volume,
+            "total_sets": coord.total_sets,
+            "total_workouts": coord.total_workouts,
         }
 
+
+class HAFitnessTotalVolumeSensor(_HAFitnessSensorBase):
+    """Sensor for persisted total training volume."""
+
+    _attr_translation_key = "total_volume"
+    _attr_native_unit_of_measurement = UnitOfMass.KILOGRAMS
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+
+    def __init__(
+        self, coordinator: HAFitnessCoordinator, entry: ConfigEntry
+    ) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{entry.entry_id}_total_volume"
+
+    @property
+    def native_value(self) -> float:
+        return self._coordinator.total_volume
+
+
+class HAFitnessTotalSetsSensor(_HAFitnessSensorBase):
+    """Sensor for persisted total set count."""
+
+    _attr_translation_key = "total_sets"
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+
+    def __init__(
+        self, coordinator: HAFitnessCoordinator, entry: ConfigEntry
+    ) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{entry.entry_id}_total_sets"
+
+    @property
+    def native_value(self) -> int:
+        return self._coordinator.total_sets
+
+
+class HAFitnessTotalWorkoutsSensor(_HAFitnessSensorBase):
+    """Sensor for persisted total workout count."""
+
+    _attr_translation_key = "total_workouts"
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+
+    def __init__(
+        self, coordinator: HAFitnessCoordinator, entry: ConfigEntry
+    ) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{entry.entry_id}_total_workouts"
+
+    @property
+    def native_value(self) -> int:
+        return self._coordinator.total_workouts
+
+
+class HAFitnessPRByExerciseSensor(_HAFitnessSensorBase):
+    """Sensor for per-exercise PR based on max saved weight."""
+
+    _attr_native_unit_of_measurement = UnitOfMass.KILOGRAMS
+
+    def __init__(
+        self,
+        coordinator: HAFitnessCoordinator,
+        entry: ConfigEntry,
+        exercise: str,
+    ) -> None:
+        super().__init__(coordinator, entry)
+        exercise_key = _exercise_key(exercise)
+        self._exercise = exercise
+        self._attr_translation_key = f"pr_{exercise_key}"
+        self._attr_unique_id = f"{entry.entry_id}_pr_{exercise_key}"
+
+    @property
+    def native_value(self) -> float:
+        return self._coordinator.get_pr_by_exercise(self._exercise)
+
+
+class HAFitnessVolumeByExerciseSensor(_HAFitnessSensorBase):
+    """Sensor for per-exercise accumulated total volume."""
+
+    _attr_native_unit_of_measurement = UnitOfMass.KILOGRAMS
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+
+    def __init__(
+        self,
+        coordinator: HAFitnessCoordinator,
+        entry: ConfigEntry,
+        exercise: str,
+    ) -> None:
+        super().__init__(coordinator, entry)
+        exercise_key = _exercise_key(exercise)
+        self._exercise = exercise
+        self._attr_translation_key = f"volume_{exercise_key}_total"
+        self._attr_unique_id = f"{entry.entry_id}_volume_{exercise_key}_total"
+
+    @property
+    def native_value(self) -> float:
+        return self._coordinator.get_volume_by_exercise(self._exercise)
+
+
+class HAFitnessRecentSetsSensor(_HAFitnessSensorBase):
+    """Sensor exposing recent sets for dashboard cards."""
+
+    _attr_translation_key = "recent_sets"
+
+    def __init__(
+        self, coordinator: HAFitnessCoordinator, entry: ConfigEntry
+    ) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{entry.entry_id}_recent_sets"
+
+    @property
+    def native_value(self) -> int:
+        return len(self._coordinator.recent_sets)
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return {"recent_sets": self._coordinator.recent_sets}
+
+
+def _exercise_key(exercise: str) -> str:
+    return exercise.lower().replace(" ", "_").replace("-", "_")

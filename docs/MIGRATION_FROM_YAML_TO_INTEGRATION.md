@@ -3,7 +3,7 @@
 This document describes the migration path from the YAML-based prototype
 (`/packages`) to the native Home Assistant custom integration (`custom_components/ha_fitness`).
 
-## Current State (Phase 1.7)
+## Current State (Phase 2)
 
 | Feature | YAML Packages | Native Integration |
 |---------|:---:|:---:|
@@ -17,19 +17,19 @@ This document describes the migration path from the YAML-based prototype
 | Current set number sensor | ✅ | ✅ |
 | Set volume sensor | ✅ | ✅ |
 | Active workout summary sensor | ✅ | ✅ |
-| Persistence across HA restart | ✅ | ❌ planned |
-| Exercise history | ✅ | ❌ planned |
-| PR tracking | ✅ | ❌ planned |
-| Volume statistics | ✅ | ❌ planned |
+| Persistence across HA restart | ✅ | ✅ |
+| Exercise history (recent sets) | ✅ | ✅ basic |
+| PR tracking | ✅ | ✅ |
+| Volume statistics | ✅ | ✅ basic |
 | Recovery tracking | ✅ | ❌ planned |
 | NFC / QR workflow | ✅ | ❌ planned |
-| SQLite persistence | ❌ planned | ❌ planned |
+| SQLite persistence | ❌ planned | ✅ |
 | Config UI (Settings → D&S) | ❌ | ✅ |
 | HACS installable | ❌ | ✅ |
 
 ## Native Workout Flow
 
-The Phase 1.7 integration supports a complete minimal workout flow:
+The Phase 2 integration supports a persisted native workout flow:
 
 1. **Start Workout** – press `button.ha_fitness_start_workout`
 2. **Select Exercise** – choose from `select.ha_fitness_active_exercise`
@@ -42,24 +42,23 @@ The Phase 1.7 integration supports a complete minimal workout flow:
 
 ## Current Limitations
 
-- **No persistence across HA restart** – all runtime state (set number, last set, etc.) is reset on restart.
-- **No per-exercise PR tracking** – planned for a future phase.
-- **No workout volume history** – planned together with SQLite storage.
-- **No SQLite** – lightweight in-memory state only.
-- **YAML prototype remains more complete for analytics** – use YAML packages for volume history, PRs, and statistics.
+- **Recent history is lightweight** – exposed via `sensor.ha_fitness_recent_sets` attributes.
+- **Advanced analytics and visualization** are still richer in YAML prototype dashboards.
+- **No destructive data purge service yet** – deleting data is intentionally manual (remove SQLite DB file).
 
 ## Migration Roadmap
 
-### Phase 1.7 – Native entity migration start (current)
+### Phase 1.7 – Native entity migration start (completed)
 - Native exercise selection (`select`), weight/reps inputs (`number`), notes (`text`).
 - Save set button with validation and persistent notification on error.
 - Extended sensors: active exercise, set number, last set, volume, summary.
 - Improved `save_set` service with strict validation.
 
-### Phase 2 – Persistence
-- Introduce SQLite-backed storage via a custom database helper.
-- Persist workouts and sets across HA restarts.
-- Implement exercise catalogue as a native data model.
+### Phase 2 – Persistence (current)
+- SQLite-backed storage under `/config/ha_fitness/ha_fitness.db`.
+- Persisted workouts/sets with startup restore of open workout and aggregate stats.
+- Native PR, volume-total, and recent-set sensors backed by SQLite.
+- Maintenance services for statistics refresh and JSON export.
 
 ### Phase 3 – History and statistics
 - Migrate workout history templates to native sensors.

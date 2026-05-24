@@ -34,9 +34,8 @@ Build a local-first, privacy-first fitness subsystem for Home Assistant with:
 2. Download **HA Fitness Tracker** from HACS and restart Home Assistant.
 3. Go to **Settings → Devices & Services → Add Integration** and search for **HA Fitness Tracker**.
 
-> ⚠️ The HACS integration now supports a minimal native workout flow (Phase 1.7).
-> The YAML packages below remain a more feature-complete prototype for analytics and history
-> until SQLite persistence and PR tracking are implemented natively.
+> ✅ The HACS integration now includes SQLite-backed persistence (Phase 2).
+> Data is stored locally at `/config/ha_fitness/ha_fitness.db` and survives restart/update.
 
 See [`docs/HACS_INSTALLATION.md`](docs/HACS_INSTALLATION.md) for full details.
 
@@ -53,7 +52,7 @@ See [`docs/DEVELOPMENT_SETUP.md`](docs/DEVELOPMENT_SETUP.md) for a complete setu
 
 ## Current Phase
 
-This repository provides **Phase 1.7 (Native Entity Migration Start)** with:
+This repository provides **Phase 2 (SQLite-backed native persistence)** with:
 
 ### HACS Native Integration
 
@@ -61,8 +60,13 @@ This repository provides **Phase 1.7 (Native Entity Migration Start)** with:
 - `number.ha_fitness_weight` and `number.ha_fitness_reps` – set input controls
 - `text.ha_fitness_notes` – optional per-set notes
 - `button.ha_fitness_save_set` – saves the current set with validation
-- 5 sensors: status, active exercise, set number, last set, volume, summary
-- Improved `ha_fitness.save_set` service with strict validation
+- persisted workouts/sets in `/config/ha_fitness/ha_fitness.db`
+- restored open workout/last set/statistics after Home Assistant restart
+- aggregate sensors: total volume, total sets, total workouts
+- per-exercise PR sensors and volume-total sensors
+- recent sets sensor for dashboard history attributes
+- improved `ha_fitness.save_set` service with implicit workout fallback
+- maintenance services: `ha_fitness.refresh_statistics`, `ha_fitness.export_data`
 - Persistent notification on save errors
 - Native dashboard at `dashboards/ha_fitness_native_dashboard.yaml`
 
@@ -76,7 +80,7 @@ This repository provides **Phase 1.7 (Native Entity Migration Start)** with:
 - expanded dashboard examples
 - NFC/QR workflow docs and automation examples
 - weekly/monthly/yearly muscle-group statistics
-- SQLite migration plan for **Phase 2**
+- SQLite backend docs and schema migration tracking
 
 ## Repository Structure
 
@@ -118,6 +122,7 @@ Planned model fields:
 - [`docs/QR_WORKFLOW.md`](docs/QR_WORKFLOW.md)
 - [`docs/WORKOUT_UX.md`](docs/WORKOUT_UX.md)
 - [`docs/SQLITE_MIGRATION.md`](docs/SQLITE_MIGRATION.md)
+- [`docs/STORAGE.md`](docs/STORAGE.md)
 - [`docs/HACS_PREPARATION.md`](docs/HACS_PREPARATION.md)
 - [`docs/HACS_INSTALLATION.md`](docs/HACS_INSTALLATION.md)
 - [`docs/MIGRATION_FROM_YAML_TO_INTEGRATION.md`](docs/MIGRATION_FROM_YAML_TO_INTEGRATION.md)
