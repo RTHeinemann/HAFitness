@@ -170,7 +170,7 @@ template:
         unit_of_measurement: kg
         state_class: total_increasing
         state: "{{ states('input_number.fitness_total_volume_tricep_pushdown') | float(0) }}"
-      - name: Fitness Muscle Volume Chest
+      - name: Fitness Muscle Group Volume Chest
         unique_id: fitness_muscle_volume_chest
         unit_of_measurement: kg
         state: >
@@ -182,7 +182,7 @@ template:
             {% endif %}
           {% endfor %}
           {{ ns.total | round(2) }}
-      - name: Fitness Muscle Volume Legs
+      - name: Fitness Muscle Group Volume Legs
         unique_id: fitness_muscle_volume_legs
         unit_of_measurement: kg
         state: >
@@ -194,7 +194,7 @@ template:
             {% endif %}
           {% endfor %}
           {{ ns.total | round(2) }}
-      - name: Fitness Muscle Volume Posterior Chain
+      - name: Fitness Muscle Group Volume Posterior Chain
         unique_id: fitness_muscle_volume_posterior_chain
         unit_of_measurement: kg
         state: >
@@ -206,7 +206,7 @@ template:
             {% endif %}
           {% endfor %}
           {{ ns.total | round(2) }}
-      - name: Fitness Muscle Volume Shoulders
+      - name: Fitness Muscle Group Volume Shoulders
         unique_id: fitness_muscle_volume_shoulders
         unit_of_measurement: kg
         state: >
@@ -218,7 +218,7 @@ template:
             {% endif %}
           {% endfor %}
           {{ ns.total | round(2) }}
-      - name: Fitness Muscle Volume Back
+      - name: Fitness Muscle Group Volume Back
         unique_id: fitness_muscle_volume_back
         unit_of_measurement: kg
         state: >
@@ -230,7 +230,7 @@ template:
             {% endif %}
           {% endfor %}
           {{ ns.total | round(2) }}
-      - name: Fitness Muscle Volume Biceps
+      - name: Fitness Muscle Group Volume Biceps
         unique_id: fitness_muscle_volume_biceps
         unit_of_measurement: kg
         state: >
@@ -242,7 +242,7 @@ template:
             {% endif %}
           {% endfor %}
           {{ ns.total | round(2) }}
-      - name: Fitness Muscle Volume Triceps
+      - name: Fitness Muscle Group Volume Triceps
         unique_id: fitness_muscle_volume_triceps
         unit_of_measurement: kg
         state: >
