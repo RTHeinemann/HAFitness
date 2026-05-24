@@ -9,15 +9,13 @@ script:
           weight: "{{ states('input_number.fitness_input_weight') | float(0) }}"
           reps: "{{ states('input_number.fitness_input_reps') | int(0) }}"
           volume: "{{ (weight * reps) | round(2) }}"
-          valid_exercises:
-            - bench_press
-            - squat
-            - deadlift
-            - shoulder_press
-            - row
-            - lat_pulldown
-            - bicep_curl
-            - tricep_pushdown
+          weight_unit: "{{ state_attr('input_number.fitness_input_weight', 'unit_of_measurement') | default('kg', true) }}"
+          valid_exercises: >
+            {{ state_attr('input_select.fitness_active_exercise', 'options')
+                | default([], true)
+                | map('lower')
+                | map('replace', ' ', '_')
+                | list }}
           set_number_entity: "{{ 'input_number.fitness_set_number_' ~ exercise_key if exercise_key in valid_exercises else none }}"
           last_set_entity: "{{ 'input_text.fitness_last_set_' ~ exercise_key if exercise_key in valid_exercises else none }}"
           total_volume_entity: "{{ 'input_number.fitness_total_volume_' ~ exercise_key if exercise_key in valid_exercises else none }}"
@@ -25,13 +23,18 @@ script:
       - choose:
           - conditions:
               - condition: template
-                value_template: "{{ set_number_entity is not none }}"
+                value_template: >
+                  {{ set_number_entity is not none
+                     and states(set_number_entity) not in ['unknown', 'unavailable']
+                     and states(last_set_entity) not in ['unknown', 'unavailable']
+                     and states(total_volume_entity) not in ['unknown', 'unavailable']
+                     and states(pr_entity) not in ['unknown', 'unavailable'] }}
             sequence:
               - variables:
                   next_set_number: "{{ states(set_number_entity) | int(0) + 1 }}"
                   new_total_volume: "{{ (states(total_volume_entity) | float(0) + volume) | round(2) }}"
                   current_pr: "{{ states(pr_entity) | float(0) }}"
-                  set_summary: "Set {{ next_set_number }}: {{ reps }} reps @ {{ weight }} kg ({{ volume }} kg)"
+                  set_summary: "Set {{ next_set_number }}: {{ reps }} reps @ {{ weight }} {{ weight_unit }} ({{ volume }} {{ weight_unit }})"
               - service: input_number.set_value
                 target:
                   entity_id: "{{ set_number_entity }}"
