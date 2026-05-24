@@ -119,9 +119,7 @@ script:
                 data:
                   notification_id: fitness_save_set_error
                   title: Fitness Save Set Failed
-                  message: >
-                    Unable to save set. Weight and reps must both be greater than zero
-                    (received {{ weight }} {{ weight_unit }}, {{ reps }} reps).
+                  message: "Unable to save set. Weight and reps must both be greater than zero (received {{ weight }} {{ weight_unit }}, {{ reps }} reps)."
               - service: logbook.log
                 data:
                   name: Fitness Workout
