@@ -24,11 +24,24 @@ script:
       - repeat:
           for_each: "{{ exercises.keys() | list }}"
           sequence:
-            - service: input_number.set_value
-              target:
-                entity_id: "{{ 'input_number.fitness_set_number_' ~ repeat.item }}"
-              data:
-                value: 0
+            - variables:
+                set_number_entity: "{{ 'input_number.fitness_set_number_' ~ repeat.item }}"
+            - choose:
+                - conditions:
+                    - condition: template
+                      value_template: "{{ states(set_number_entity) not in ['unknown', 'unavailable'] }}"
+                  sequence:
+                    - service: input_number.set_value
+                      target:
+                        entity_id: "{{ set_number_entity }}"
+                      data:
+                        value: 0
+              default:
+                - service: logbook.log
+                  data:
+                    name: Fitness Workout
+                    entity_id: input_boolean.fitness_workout_active
+                    message: "Could not reset current set counter because entity is missing or unavailable: {{ set_number_entity }}"
       - service: logbook.log
         data:
           name: Fitness Workout
@@ -63,8 +76,14 @@ script:
       - variables:
           workout_active: "{{ is_state('input_boolean.fitness_workout_active', 'on') }}"
           active_exercise: "{{ states('input_select.fitness_active_exercise') }}"
+          invalid_exercise_values:
+            - unknown
+            - unavailable
+            - ""
+            - "None"
+            - Select Exercise
           no_exercise_selected: >
-            {{ active_exercise in ['unknown', 'unavailable', '', 'None', 'Select Exercise'] }}
+            {{ active_exercise in invalid_exercise_values }}
           exercise_key: "{{ active_exercise | lower | replace(' ', '_') }}"
           weight: "{{ states('input_number.fitness_input_weight') | float(0) }}"
           reps: "{{ states('input_number.fitness_input_reps') | int(0) }}"
@@ -73,15 +92,26 @@ script:
           valid_exercises: >
             {{ state_attr('input_select.fitness_active_exercise', 'options')
                 | default([], true)
+                | reject('equalto', 'Select Exercise')
                 | map('lower')
                 | map('replace', ' ', '_')
-                | reject('equalto', 'select_exercise')
                 | list }}
           set_number_entity: "{{ 'input_number.fitness_set_number_' ~ exercise_key if exercise_key in valid_exercises and not no_exercise_selected else none }}"
           lifetime_set_count_entity: "{{ 'input_number.fitness_lifetime_set_count_' ~ exercise_key if exercise_key in valid_exercises and not no_exercise_selected else none }}"
           last_set_entity: "{{ 'input_text.fitness_last_set_' ~ exercise_key if exercise_key in valid_exercises else none }}"
           total_volume_entity: "{{ 'input_number.fitness_total_volume_' ~ exercise_key if exercise_key in valid_exercises else none }}"
           pr_entity: "{{ 'input_number.fitness_pr_' ~ exercise_key if exercise_key in valid_exercises else none }}"
+          entities_ready: >
+            {{ set_number_entity is not none
+               and lifetime_set_count_entity is not none
+               and last_set_entity is not none
+               and total_volume_entity is not none
+               and pr_entity is not none
+               and states(set_number_entity) not in ['unknown', 'unavailable']
+               and states(lifetime_set_count_entity) not in ['unknown', 'unavailable']
+               and states(last_set_entity) not in ['unknown', 'unavailable']
+               and states(total_volume_entity) not in ['unknown', 'unavailable']
+               and states(pr_entity) not in ['unknown', 'unavailable'] }}
       - choose:
           - conditions:
               - condition: template
@@ -127,17 +157,7 @@ script:
                   message: "Unable to save set. Invalid inputs: {{ reps }} reps @ {{ weight }} {{ weight_unit }}."
           - conditions:
               - condition: template
-                value_template: >
-                  {{ set_number_entity is none
-                     or lifetime_set_count_entity is none
-                     or last_set_entity is none
-                     or total_volume_entity is none
-                     or pr_entity is none
-                     or states(set_number_entity) in ['unknown', 'unavailable']
-                     or states(lifetime_set_count_entity) in ['unknown', 'unavailable']
-                     or states(last_set_entity) in ['unknown', 'unavailable']
-                     or states(total_volume_entity) in ['unknown', 'unavailable']
-                     or states(pr_entity) in ['unknown', 'unavailable'] }}
+                value_template: "{{ not entities_ready }}"
             sequence:
               - service: persistent_notification.create
                 data:
@@ -153,14 +173,7 @@ script:
                   message: "Unable to save set. Missing or unavailable entities for exercise: {{ active_exercise }}."
           - conditions:
               - condition: template
-                value_template: >
-                  {{ set_number_entity is not none
-                     and lifetime_set_count_entity is not none
-                     and states(set_number_entity) not in ['unknown', 'unavailable']
-                     and states(lifetime_set_count_entity) not in ['unknown', 'unavailable']
-                     and states(last_set_entity) not in ['unknown', 'unavailable']
-                     and states(total_volume_entity) not in ['unknown', 'unavailable']
-                     and states(pr_entity) not in ['unknown', 'unavailable'] }}
+                value_template: "{{ entities_ready }}"
             sequence:
               - variables:
                   next_set_number: "{{ states(set_number_entity) | int(0) + 1 }}"
