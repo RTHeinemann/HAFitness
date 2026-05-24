@@ -1,0 +1,8 @@
+{
+  "name": "HA Fitness Tracker",
+  "domains": ["ha_fitness"],
+  "documentation": "https://github.com/RTHeinemann/HAFitness",
+  "codeowners": ["@RTHeinemann"],
+  "iot_class": "local_push",
+  "homeassistant": "2024.1.0"
+}

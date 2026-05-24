@@ -1,0 +1,64 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "HA Fitness Tracker einrichten",
+        "description": "Konfiguriere deine HA Fitness Tracker Integration.",
+        "data": {
+          "display_name": "Anzeigename"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "status": {
+        "name": "Status",
+        "state": {
+          "ready": "Bereit",
+          "active": "Aktiv"
+        }
+      }
+    },
+    "button": {
+      "start_workout": {
+        "name": "Training starten"
+      },
+      "finish_workout": {
+        "name": "Training beenden"
+      }
+    }
+  },
+  "services": {
+    "start_workout": {
+      "name": "Training starten",
+      "description": "Markiert den Beginn einer Trainingseinheit."
+    },
+    "finish_workout": {
+      "name": "Training beenden",
+      "description": "Markiert das Ende einer Trainingseinheit."
+    },
+    "save_set": {
+      "name": "Satz speichern",
+      "description": "Protokolliert einen abgeschlossenen Übungssatz.",
+      "fields": {
+        "exercise": {
+          "name": "Übung",
+          "description": "Name der ausgeführten Übung."
+        },
+        "weight": {
+          "name": "Gewicht",
+          "description": "Verwendetes Gewicht (in kg oder lb)."
+        },
+        "reps": {
+          "name": "Wiederholungen",
+          "description": "Anzahl der abgeschlossenen Wiederholungen."
+        },
+        "notes": {
+          "name": "Notizen",
+          "description": "Optionale Notizen zum Satz."
+        }
+      }
+    }
+  }
+}

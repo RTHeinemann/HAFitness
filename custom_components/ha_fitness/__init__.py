@@ -1,0 +1,85 @@
+"""HA Fitness Tracker integration."""
+from __future__ import annotations
+
+import logging
+import voluptuous as vol
+
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.helpers import config_validation as cv
+
+from .const import (
+    ATTR_EXERCISE,
+    ATTR_NOTES,
+    ATTR_REPS,
+    ATTR_WEIGHT,
+    CONF_DISPLAY_NAME,
+    DEFAULT_DISPLAY_NAME,
+    DOMAIN,
+    SERVICE_FINISH_WORKOUT,
+    SERVICE_SAVE_SET,
+    SERVICE_START_WORKOUT,
+)
+from .coordinator import HAFitnessCoordinator
+
+_LOGGER = logging.getLogger(__name__)
+
+PLATFORMS = ["sensor", "button"]
+
+
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Set up HA Fitness Tracker from a config entry."""
+    display_name: str = entry.data.get(CONF_DISPLAY_NAME, DEFAULT_DISPLAY_NAME)
+    coordinator = HAFitnessCoordinator(hass, display_name)
+
+    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
+
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    _register_services(hass, coordinator)
+
+    return True
+
+
+async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Unload a config entry."""
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if unload_ok:
+        hass.data[DOMAIN].pop(entry.entry_id)
+    return unload_ok
+
+
+def _register_services(hass: HomeAssistant, coordinator: HAFitnessCoordinator) -> None:
+    """Register integration services (idempotent)."""
+    if hass.services.has_service(DOMAIN, SERVICE_START_WORKOUT):
+        return
+
+    async def handle_start_workout(call: ServiceCall) -> None:
+        coordinator.start_workout()
+
+    async def handle_finish_workout(call: ServiceCall) -> None:
+        coordinator.finish_workout()
+
+    async def handle_save_set(call: ServiceCall) -> None:
+        coordinator.save_set(
+            exercise=call.data[ATTR_EXERCISE],
+            weight=call.data[ATTR_WEIGHT],
+            reps=call.data[ATTR_REPS],
+            notes=call.data.get(ATTR_NOTES),
+        )
+
+    hass.services.async_register(DOMAIN, SERVICE_START_WORKOUT, handle_start_workout)
+    hass.services.async_register(DOMAIN, SERVICE_FINISH_WORKOUT, handle_finish_workout)
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_SAVE_SET,
+        handle_save_set,
+        schema=vol.Schema(
+            {
+                vol.Required(ATTR_EXERCISE): cv.string,
+                vol.Required(ATTR_WEIGHT): vol.Coerce(float),
+                vol.Required(ATTR_REPS): vol.Coerce(int),
+                vol.Optional(ATTR_NOTES): cv.string,
+            }
+        ),
+    )

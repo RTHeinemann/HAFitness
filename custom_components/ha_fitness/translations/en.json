@@ -1,0 +1,64 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "HA Fitness Tracker Setup",
+        "description": "Configure your HA Fitness Tracker integration.",
+        "data": {
+          "display_name": "Display Name"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "status": {
+        "name": "Status",
+        "state": {
+          "ready": "Ready",
+          "active": "Active"
+        }
+      }
+    },
+    "button": {
+      "start_workout": {
+        "name": "Start Workout"
+      },
+      "finish_workout": {
+        "name": "Finish Workout"
+      }
+    }
+  },
+  "services": {
+    "start_workout": {
+      "name": "Start Workout",
+      "description": "Marks the start of a workout session."
+    },
+    "finish_workout": {
+      "name": "Finish Workout",
+      "description": "Marks the end of a workout session."
+    },
+    "save_set": {
+      "name": "Save Set",
+      "description": "Logs a completed exercise set.",
+      "fields": {
+        "exercise": {
+          "name": "Exercise",
+          "description": "Name of the exercise performed."
+        },
+        "weight": {
+          "name": "Weight",
+          "description": "Weight used (in kg or lb)."
+        },
+        "reps": {
+          "name": "Reps",
+          "description": "Number of repetitions completed."
+        },
+        "notes": {
+          "name": "Notes",
+          "description": "Optional notes about the set."
+        }
+      }
+    }
+  }
+}

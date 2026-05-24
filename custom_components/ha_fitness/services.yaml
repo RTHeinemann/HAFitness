@@ -1,0 +1,47 @@
+start_workout:
+  name: Start Workout
+  description: Marks the start of a workout session.
+
+finish_workout:
+  name: Finish Workout
+  description: Marks the end of a workout session.
+
+save_set:
+  name: Save Set
+  description: Logs a completed exercise set.
+  fields:
+    exercise:
+      name: Exercise
+      description: Name of the exercise performed.
+      required: true
+      example: "Bench Press"
+      selector:
+        text:
+    weight:
+      name: Weight
+      description: Weight used (in kg or lb, as preferred).
+      required: true
+      example: 80
+      selector:
+        number:
+          min: 0
+          max: 1000
+          step: 0.5
+    reps:
+      name: Reps
+      description: Number of repetitions completed.
+      required: true
+      example: 10
+      selector:
+        number:
+          min: 1
+          max: 999
+          step: 1
+          mode: box
+    notes:
+      name: Notes
+      description: Optional notes about the set.
+      required: false
+      example: "Felt strong today"
+      selector:
+        text:
