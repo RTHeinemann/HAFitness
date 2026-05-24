@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
@@ -40,10 +40,16 @@ class HAFitnessStatusSensor(SensorEntity):
             entry_type="service",
         )
 
+    async def async_added_to_hass(self) -> None:
+        """Subscribe to coordinator updates."""
+        self.async_on_remove(
+            self._coordinator.async_add_listener(self._handle_coordinator_update)
+        )
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        self.async_write_ha_state()
+
     @property
     def native_value(self) -> str:
         return self._coordinator.workout_state
-
-    def update_state(self) -> None:
-        """Trigger a state refresh."""
-        self.async_write_ha_state()

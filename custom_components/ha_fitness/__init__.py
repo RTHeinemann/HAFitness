@@ -51,7 +51,11 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 def _register_services(hass: HomeAssistant, coordinator: HAFitnessCoordinator) -> None:
     """Register integration services (idempotent)."""
-    if hass.services.has_service(DOMAIN, SERVICE_START_WORKOUT):
+    if (
+        hass.services.has_service(DOMAIN, SERVICE_START_WORKOUT)
+        and hass.services.has_service(DOMAIN, SERVICE_FINISH_WORKOUT)
+        and hass.services.has_service(DOMAIN, SERVICE_SAVE_SET)
+    ):
         return
 
     async def handle_start_workout(call: ServiceCall) -> None:
