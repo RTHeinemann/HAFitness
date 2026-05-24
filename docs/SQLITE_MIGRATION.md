@@ -1,18 +1,58 @@
-# SQLite Migration Plan
+# SQLite Migration Status
 
 ## Objective
 
-Move from helper-centric MVP storage toward structured set logging without breaking dashboards.
+Move native integration state from runtime-only memory to SQLite persistence without external services or dependencies.
 
-## Target Schema (initial)
+## Status
 
-- `Workout(id, user_id, started_at, finished_at)`
-- `Exercise(id, name, muscle_group, equipment)`
-- `SetLog(id, workout_id, exercise_id, set_number, weight, reps, volume, notes, created_at)`
+✅ Implemented in Phase 2.
 
-## Migration Strategy
+## Runtime Database Path
 
-1. Keep current helper entities as compatibility layer.
-2. Begin writing new sets to SQLite in parallel.
-3. Read analytics from SQL sensors first, then deprecate helper aggregates.
-4. Preserve user-scoped keys from day one (`user_id` on Workout).
+- `/config/ha_fitness/ha_fitness.db`
+- Home Assistant path usage: `hass.config.path("ha_fitness", "ha_fitness.db")`
+
+## Schema Versioning
+
+The integration tracks schema versions in `schema_migrations`:
+
+- `version INTEGER PRIMARY KEY`
+- `applied_at TEXT NOT NULL`
+
+Current schema version: **1**
+
+## Version 1 Schema
+
+### workouts
+
+- `id INTEGER PRIMARY KEY AUTOINCREMENT`
+- `started_at TEXT NOT NULL`
+- `finished_at TEXT`
+- `created_at TEXT NOT NULL`
+
+### set_logs
+
+- `id INTEGER PRIMARY KEY AUTOINCREMENT`
+- `workout_id INTEGER`
+- `exercise TEXT NOT NULL`
+- `weight REAL NOT NULL`
+- `reps INTEGER NOT NULL`
+- `volume REAL NOT NULL`
+- `notes TEXT`
+- `created_at TEXT NOT NULL`
+- `FOREIGN KEY(workout_id) REFERENCES workouts(id)`
+
+### Indexes
+
+- `idx_set_logs_exercise_created_at`
+- `idx_set_logs_created_at`
+- `idx_set_logs_workout_id`
+- `idx_workouts_started_at`
+
+## Behavior
+
+- Database directory and file are created automatically on integration startup.
+- Open workouts (`finished_at IS NULL`) are restored after Home Assistant restart.
+- Aggregate statistics and recent sets are reloaded from SQLite at startup.
+- Service-triggered set saves while inactive create an implicit workout, save one set, and finish it.

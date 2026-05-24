@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import sqlite3
 import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry
@@ -17,11 +18,14 @@ from .const import (
     CONF_DISPLAY_NAME,
     DEFAULT_DISPLAY_NAME,
     DOMAIN,
+    SERVICE_EXPORT_DATA,
     SERVICE_FINISH_WORKOUT,
+    SERVICE_REFRESH_STATISTICS,
     SERVICE_SAVE_SET,
     SERVICE_START_WORKOUT,
 )
 from .coordinator import HAFitnessCoordinator
+from .storage import HAFitnessStore
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -31,7 +35,14 @@ PLATFORMS = ["sensor", "button", "select", "number", "text"]
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up HA Fitness Tracker from a config entry."""
     display_name: str = entry.data.get(CONF_DISPLAY_NAME, DEFAULT_DISPLAY_NAME)
-    coordinator = HAFitnessCoordinator(hass, display_name)
+    try:
+        store = HAFitnessStore(hass)
+        await store.async_initialize()
+        coordinator = HAFitnessCoordinator(hass, display_name, store)
+        await coordinator.async_initialize()
+    except (HomeAssistantError, sqlite3.Error, OSError) as err:
+        _LOGGER.error("HA Fitness setup failed: %s", err)
+        return False
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
 
@@ -47,6 +58,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
         hass.data[DOMAIN].pop(entry.entry_id)
+        if not hass.data[DOMAIN]:
+            _unregister_services(hass)
     return unload_ok
 
 
@@ -60,6 +73,8 @@ def _register_services(hass: HomeAssistant) -> None:
         hass.services.has_service(DOMAIN, SERVICE_START_WORKOUT)
         and hass.services.has_service(DOMAIN, SERVICE_FINISH_WORKOUT)
         and hass.services.has_service(DOMAIN, SERVICE_SAVE_SET)
+        and hass.services.has_service(DOMAIN, SERVICE_REFRESH_STATISTICS)
+        and hass.services.has_service(DOMAIN, SERVICE_EXPORT_DATA)
     ):
         return
 
@@ -68,11 +83,11 @@ def _register_services(hass: HomeAssistant) -> None:
 
     async def handle_start_workout(call: ServiceCall) -> None:
         for coordinator in _all_coordinators():
-            coordinator.start_workout()
+            await coordinator.start_workout()
 
     async def handle_finish_workout(call: ServiceCall) -> None:
         for coordinator in _all_coordinators():
-            coordinator.finish_workout()
+            await coordinator.finish_workout()
 
     async def handle_save_set(call: ServiceCall) -> None:
         exercise: str = call.data[ATTR_EXERCISE]
@@ -94,12 +109,20 @@ def _register_services(hass: HomeAssistant) -> None:
             raise HomeAssistantError(message)
 
         for coordinator in _all_coordinators():
-            coordinator.save_set(
+            await coordinator.save_set(
                 exercise=exercise,
                 weight=weight,
                 reps=reps,
                 notes=notes,
             )
+
+    async def handle_refresh_statistics(call: ServiceCall) -> None:
+        for coordinator in _all_coordinators():
+            await coordinator.async_refresh_statistics()
+
+    async def handle_export_data(call: ServiceCall) -> None:
+        for coordinator in _all_coordinators():
+            await coordinator.async_export_data()
 
     hass.services.async_register(DOMAIN, SERVICE_START_WORKOUT, handle_start_workout)
     hass.services.async_register(DOMAIN, SERVICE_FINISH_WORKOUT, handle_finish_workout)
@@ -116,3 +139,26 @@ def _register_services(hass: HomeAssistant) -> None:
             }
         ),
     )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_REFRESH_STATISTICS,
+        handle_refresh_statistics,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_EXPORT_DATA,
+        handle_export_data,
+    )
+
+
+def _unregister_services(hass: HomeAssistant) -> None:
+    """Remove integration services when last entry unloads."""
+    for service in (
+        SERVICE_START_WORKOUT,
+        SERVICE_FINISH_WORKOUT,
+        SERVICE_SAVE_SET,
+        SERVICE_REFRESH_STATISTICS,
+        SERVICE_EXPORT_DATA,
+    ):
+        if hass.services.has_service(DOMAIN, service):
+            hass.services.async_remove(DOMAIN, service)

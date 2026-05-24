@@ -5,18 +5,12 @@ views:
     icon: mdi:dumbbell
     cards:
       - type: entities
-        title: Workout Status
+        title: Workout Controls
         entities:
           - entity: sensor.ha_fitness_status
-          - entity: sensor.ha_fitness_active_exercise
-          - entity: sensor.ha_fitness_current_set_number
-          - entity: sensor.ha_fitness_current_set_volume
-          - entity: sensor.ha_fitness_last_set
-
-      - type: entities
-        title: Active Workout Summary
-        entities:
-          - entity: sensor.ha_fitness_active_workout_summary
+          - entity: button.ha_fitness_start_workout
+          - entity: button.ha_fitness_finish_workout
+          - entity: button.ha_fitness_save_set
 
       - type: entities
         title: Set Inputs
@@ -26,23 +20,55 @@ views:
           - entity: number.ha_fitness_reps
           - entity: text.ha_fitness_notes
 
-      - type: horizontal-stack
-        cards:
-          - type: button
-            entity: button.ha_fitness_start_workout
-            name: Start Workout
-            icon: mdi:play
-            tap_action:
-              action: toggle
-          - type: button
-            entity: button.ha_fitness_save_set
-            name: Save Set
-            icon: mdi:content-save
-            tap_action:
-              action: toggle
-          - type: button
-            entity: button.ha_fitness_finish_workout
-            name: Finish Workout
-            icon: mdi:stop
-            tap_action:
-              action: toggle
+      - type: entities
+        title: Current Workout Summary
+        entities:
+          - entity: sensor.ha_fitness_active_workout_summary
+          - entity: sensor.ha_fitness_active_exercise
+          - entity: sensor.ha_fitness_current_set_number
+
+      - type: entities
+        title: Last Set
+        entities:
+          - entity: sensor.ha_fitness_last_set
+
+      - type: entities
+        title: Current Set Volume
+        entities:
+          - entity: sensor.ha_fitness_current_set_volume
+
+      - type: entities
+        title: Global Totals
+        entities:
+          - entity: sensor.ha_fitness_total_volume
+          - entity: sensor.ha_fitness_total_sets
+          - entity: sensor.ha_fitness_total_workouts
+
+      - type: entities
+        title: PR by Exercise
+        entities:
+          - entity: sensor.ha_fitness_pr_bench_press
+          - entity: sensor.ha_fitness_pr_squat
+          - entity: sensor.ha_fitness_pr_deadlift
+          - entity: sensor.ha_fitness_pr_shoulder_press
+          - entity: sensor.ha_fitness_pr_row
+          - entity: sensor.ha_fitness_pr_lat_pulldown
+          - entity: sensor.ha_fitness_pr_bicep_curl
+          - entity: sensor.ha_fitness_pr_tricep_pushdown
+
+      - type: entities
+        title: Volume by Exercise
+        entities:
+          - entity: sensor.ha_fitness_volume_bench_press_total
+          - entity: sensor.ha_fitness_volume_squat_total
+          - entity: sensor.ha_fitness_volume_deadlift_total
+          - entity: sensor.ha_fitness_volume_shoulder_press_total
+          - entity: sensor.ha_fitness_volume_row_total
+          - entity: sensor.ha_fitness_volume_lat_pulldown_total
+          - entity: sensor.ha_fitness_volume_bicep_curl_total
+          - entity: sensor.ha_fitness_volume_tricep_pushdown_total
+
+      - type: entities
+        title: Recent Sets
+        entities:
+          - entity: sensor.ha_fitness_recent_sets

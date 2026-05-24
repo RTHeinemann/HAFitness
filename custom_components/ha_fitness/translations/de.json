@@ -33,6 +33,66 @@
       },
       "active_workout_summary": {
         "name": "Aktive Trainingsübersicht"
+      },
+      "total_volume": {
+        "name": "Gesamtvolumen"
+      },
+      "total_sets": {
+        "name": "Gesamtsätze"
+      },
+      "total_workouts": {
+        "name": "Gesamttrainings"
+      },
+      "recent_sets": {
+        "name": "Letzte Sätze"
+      },
+      "pr_bench_press": {
+        "name": "PR Bankdrücken"
+      },
+      "pr_squat": {
+        "name": "PR Kniebeuge"
+      },
+      "pr_deadlift": {
+        "name": "PR Kreuzheben"
+      },
+      "pr_shoulder_press": {
+        "name": "PR Schulterdrücken"
+      },
+      "pr_row": {
+        "name": "PR Rudern"
+      },
+      "pr_lat_pulldown": {
+        "name": "PR Latzug"
+      },
+      "pr_bicep_curl": {
+        "name": "PR Bizepscurls"
+      },
+      "pr_tricep_pushdown": {
+        "name": "PR Trizepsdrücken"
+      },
+      "volume_bench_press_total": {
+        "name": "Volumen Bankdrücken Gesamt"
+      },
+      "volume_squat_total": {
+        "name": "Volumen Kniebeuge Gesamt"
+      },
+      "volume_deadlift_total": {
+        "name": "Volumen Kreuzheben Gesamt"
+      },
+      "volume_shoulder_press_total": {
+        "name": "Volumen Schulterdrücken Gesamt"
+      },
+      "volume_row_total": {
+        "name": "Volumen Rudern Gesamt"
+      },
+      "volume_lat_pulldown_total": {
+        "name": "Volumen Latzug Gesamt"
+      },
+      "volume_bicep_curl_total": {
+        "name": "Volumen Bizepscurls Gesamt"
+      },
+      "volume_tricep_pushdown_total": {
+        "name": "Volumen Trizepsdrücken Gesamt"
       }
     },
     "button": {
@@ -76,7 +136,7 @@
     },
     "save_set": {
       "name": "Satz speichern",
-      "description": "Protokolliert einen abgeschlossenen Übungssatz. Übung, Gewicht (>0) und Wiederholungen (>0) sind erforderlich.",
+      "description": "Protokolliert einen abgeschlossenen Übungssatz. Übung, Gewicht (>0) und Wiederholungen (>0) sind erforderlich. Wenn kein Training aktiv ist, wird ein implizites Training erstellt und direkt beendet.",
       "fields": {
         "exercise": {
           "name": "Übung",
@@ -95,6 +155,14 @@
           "description": "Optionale Notizen zum Satz."
         }
       }
+    },
+    "refresh_statistics": {
+      "name": "Statistiken aktualisieren",
+      "description": "Aktualisiert Summen, PR-Werte und letzte Sätze aus SQLite."
+    },
+    "export_data": {
+      "name": "Daten exportieren",
+      "description": "Exportiert Summen, PR-Werte und letzte Sätze nach /config/ha_fitness/export.json."
     }
   }
 }
