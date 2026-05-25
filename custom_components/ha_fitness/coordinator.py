@@ -968,6 +968,7 @@ class HAFitnessCoordinator:
         """Refresh cached statistics from SQLite."""
         try:
             await self.async_refresh_users()
+            await self.async_refresh_equipment(notify=False)
             personal_user_id = self._selected_user_id or self._current_user_id or LEGACY_USER_ID
 
             self._total_volume = await self._store.async_get_total_volume()
@@ -1028,6 +1029,11 @@ class HAFitnessCoordinator:
             equipment_household = await self._store.async_get_household_equipment_statistics(
                 household_user_ids
             )
+            global_map = {
+                str(row.get("equipment_id")): row
+                for row in equipment_global
+                if row.get("equipment_id")
+            }
             personal_map = {
                 str(row.get("equipment_id")): row
                 for row in equipment_personal
@@ -1038,17 +1044,78 @@ class HAFitnessCoordinator:
                 for row in equipment_household
                 if row.get("equipment_id")
             }
-            for row in equipment_global:
-                equipment_id = str(row.get("equipment_id") or "")
+            catalog_map = {
+                str(row.get("id")): row for row in self._equipment if row.get("id")
+            }
+
+            ordered_equipment_ids: list[str] = []
+            seen_equipment_ids: set[str] = set()
+            for source_rows in (
+                equipment_global,
+                equipment_personal,
+                equipment_household,
+                self._equipment,
+            ):
+                for source_row in source_rows:
+                    equipment_id = str(
+                        source_row.get("equipment_id") or source_row.get("id") or ""
+                    )
+                    if not equipment_id or equipment_id in seen_equipment_ids:
+                        continue
+                    seen_equipment_ids.add(equipment_id)
+                    ordered_equipment_ids.append(equipment_id)
+
+            merged_equipment_statistics: list[dict[str, Any]] = []
+            for equipment_id in ordered_equipment_ids:
                 personal_row = personal_map.get(equipment_id, {})
                 household_row = household_map.get(equipment_id, {})
+                row = global_map.get(equipment_id)
+                if row is None:
+                    catalog_row = catalog_map.get(equipment_id, {})
+                    enabled_source = (
+                        catalog_row.get("enabled")
+                        if catalog_row.get("enabled") is not None
+                        else personal_row.get("enabled")
+                        if personal_row.get("enabled") is not None
+                        else household_row.get("enabled")
+                    )
+                    row = {
+                        "equipment_id": equipment_id,
+                        "name": (
+                            catalog_row.get("name")
+                            or personal_row.get("name")
+                            or household_row.get("name")
+                            or equipment_id
+                        ),
+                        "icon": (
+                            catalog_row.get("icon")
+                            or personal_row.get("icon")
+                            or household_row.get("icon")
+                        ),
+                        "location": (
+                            catalog_row.get("location")
+                            or personal_row.get("location")
+                            or household_row.get("location")
+                        ),
+                        "enabled": _coerce_enabled(enabled_source, default=True),
+                        "total_volume": 0.0,
+                        "total_sets": 0,
+                        "total_trainings": 0,
+                        "last_used": None,
+                        "top_exercise": None,
+                    }
+
                 row["personal_volume"] = float(personal_row.get("total_volume", 0.0))
                 row["household_volume"] = float(household_row.get("total_volume", 0.0))
                 row["personal_sets"] = int(personal_row.get("total_sets", 0))
                 row["household_sets"] = int(household_row.get("total_sets", 0))
-            self._equipment_statistics = equipment_global
+                merged_equipment_statistics.append(row)
+
+            self._equipment_statistics = merged_equipment_statistics
             self._equipment_statistics_by_id = {
-                str(row.get("equipment_id") or ""): row for row in equipment_global if row.get("equipment_id")
+                str(row.get("equipment_id") or ""): row
+                for row in merged_equipment_statistics
+                if row.get("equipment_id")
             }
             for row in self._exercise_statistics:
                 exercise_id = str(row.get("exercise_id") or "")
@@ -1541,3 +1608,18 @@ def _write_json(path: str, payload: dict[str, Any]) -> None:
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", encoding="utf-8") as handle:
         json.dump(payload, handle, ensure_ascii=False, indent=2)
+
+
+def _coerce_enabled(value: Any, default: bool) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int):
+        return value != 0
+    normalized = str(value).strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    return default
