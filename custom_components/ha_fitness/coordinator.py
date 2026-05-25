@@ -44,7 +44,6 @@ class HAFitnessCoordinator:
         self._current_set_number: int = 0
         self._last_set_summary: str | None = None
         self._last_saved_set: dict[str, Any] | None = None
-
         self._total_volume: float = 0.0
         self._total_sets: int = 0
         self._total_workouts: int = 0
@@ -78,7 +77,6 @@ class HAFitnessCoordinator:
         self._household_volume_by_exercise: dict[str, float] = {
             exercise: 0.0 for exercise in EXERCISES
         }
-
         self._listeners: list[Callable[[], None]] = []
 
     # ------------------------------------------------------------------
@@ -755,10 +753,8 @@ class HAFitnessCoordinator:
         return f"Set {set_number}: {exercise} - {weight} kg x {reps}"
 
 
-
 def _now_utc() -> datetime:
     return datetime.now(timezone.utc)
-
 
 
 def _write_json(path: str, payload: dict[str, Any]) -> None:

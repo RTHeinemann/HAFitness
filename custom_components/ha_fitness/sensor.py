@@ -1,6 +1,5 @@
 """Sensor platform for HA Fitness Tracker."""
 from __future__ import annotations
-
 from collections.abc import Callable
 
 from homeassistant.components.sensor import SensorEntity, SensorStateClass
