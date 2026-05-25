@@ -1035,12 +1035,12 @@ class HAFitnessCoordinator:
                 if row.get("equipment_id")
             }
             personal_map = {
-                str(row.get("equipment_id")): row
+                str(row.get("equipment_id")): dict(row)
                 for row in equipment_personal
                 if row.get("equipment_id")
             }
             household_map = {
-                str(row.get("equipment_id")): row
+                str(row.get("equipment_id")): dict(row)
                 for row in equipment_household
                 if row.get("equipment_id")
             }
@@ -1072,16 +1072,18 @@ class HAFitnessCoordinator:
                 row = global_map.get(equipment_id)
                 if row is None:
                     catalog_row = catalog_map.get(equipment_id, {})
-                    fallback_row = personal_row or household_row
+                    metadata_row: dict[str, Any] = {}
+                    for candidate in (catalog_row, personal_row, household_row):
+                        if candidate:
+                            metadata_row = candidate
+                            break
                     row = {
                         "equipment_id": equipment_id,
-                        "name": fallback_row.get("name")
-                        or catalog_row.get("name")
-                        or equipment_id,
-                        "icon": fallback_row.get("icon") or catalog_row.get("icon"),
-                        "location": fallback_row.get("location") or catalog_row.get("location"),
+                        "name": metadata_row.get("name") or equipment_id,
+                        "icon": metadata_row.get("icon"),
+                        "location": metadata_row.get("location"),
                         "enabled": bool(
-                            fallback_row.get(
+                            metadata_row.get(
                                 "enabled",
                                 int(catalog_row.get("enabled", 1)) == 1,
                             )
