@@ -196,7 +196,7 @@ class HAFitnessOptionsFlow(config_entries.OptionsFlow):
 
             if not name_en:
                 errors[ATTR_NAME_EN] = "name_required"
-            if not isinstance(sort_order_raw, int) and not isinstance(sort_order_raw, float):
+            if not _is_valid_sort_order_input(sort_order_raw):
                 errors[ATTR_SORT_ORDER] = "invalid_sort_order"
 
             if coordinator is None:
@@ -337,7 +337,7 @@ class HAFitnessOptionsFlow(config_entries.OptionsFlow):
 
             if not name_en:
                 errors[ATTR_NAME_EN] = "name_required"
-            if not isinstance(sort_order_raw, int) and not isinstance(sort_order_raw, float):
+            if not _is_valid_sort_order_input(sort_order_raw):
                 errors[ATTR_SORT_ORDER] = "invalid_sort_order"
 
             if not errors:
@@ -520,3 +520,13 @@ def _coerce_int(value: Any, fallback: int) -> int:
         return int(value)
     except (TypeError, ValueError):
         return fallback
+
+
+def _is_valid_sort_order_input(value: Any) -> bool:
+    if isinstance(value, bool):
+        return False
+    try:
+        float(value)
+    except (TypeError, ValueError):
+        return False
+    return True

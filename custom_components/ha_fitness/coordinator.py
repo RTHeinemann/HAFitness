@@ -438,7 +438,7 @@ class HAFitnessCoordinator:
         locale = self._locale.lower()
         if locale.startswith("de"):
             return str(row.get("name_de") or row.get("name_en") or exercise_id)
-        return str(row.get("name_en") or exercise_id)
+        return str(row.get("name_en") or row.get("name_de") or exercise_id)
 
     def exercise_id_from_input(self, exercise: str) -> str | None:
         """Resolve exercise id from id or localized label/name."""
