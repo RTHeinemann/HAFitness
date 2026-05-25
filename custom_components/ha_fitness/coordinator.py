@@ -968,6 +968,7 @@ class HAFitnessCoordinator:
         """Refresh cached statistics from SQLite."""
         try:
             await self.async_refresh_users()
+            await self.async_refresh_equipment(notify=False)
             personal_user_id = self._selected_user_id or self._current_user_id or LEGACY_USER_ID
 
             self._total_volume = await self._store.async_get_total_volume()
@@ -1028,6 +1029,11 @@ class HAFitnessCoordinator:
             equipment_household = await self._store.async_get_household_equipment_statistics(
                 household_user_ids
             )
+            global_map = {
+                str(row.get("equipment_id")): dict(row)
+                for row in equipment_global
+                if row.get("equipment_id")
+            }
             personal_map = {
                 str(row.get("equipment_id")): row
                 for row in equipment_personal
@@ -1038,17 +1044,66 @@ class HAFitnessCoordinator:
                 for row in equipment_household
                 if row.get("equipment_id")
             }
-            for row in equipment_global:
-                equipment_id = str(row.get("equipment_id") or "")
+            catalog_map = {
+                str(row.get("id")): row for row in self._equipment if row.get("id")
+            }
+
+            ordered_equipment_ids: list[str] = []
+            seen_equipment_ids: set[str] = set()
+            for source_rows in (
+                equipment_global,
+                equipment_personal,
+                equipment_household,
+                self._equipment,
+            ):
+                for source_row in source_rows:
+                    equipment_id = str(
+                        source_row.get("equipment_id") or source_row.get("id") or ""
+                    )
+                    if not equipment_id or equipment_id in seen_equipment_ids:
+                        continue
+                    seen_equipment_ids.add(equipment_id)
+                    ordered_equipment_ids.append(equipment_id)
+
+            merged_equipment_statistics: list[dict[str, Any]] = []
+            for equipment_id in ordered_equipment_ids:
                 personal_row = personal_map.get(equipment_id, {})
                 household_row = household_map.get(equipment_id, {})
+                row = global_map.get(equipment_id)
+                if row is None:
+                    catalog_row = catalog_map.get(equipment_id, {})
+                    fallback_row = personal_row or household_row
+                    row = {
+                        "equipment_id": equipment_id,
+                        "name": fallback_row.get("name")
+                        or catalog_row.get("name")
+                        or equipment_id,
+                        "icon": fallback_row.get("icon") or catalog_row.get("icon"),
+                        "location": fallback_row.get("location") or catalog_row.get("location"),
+                        "enabled": bool(
+                            fallback_row.get(
+                                "enabled",
+                                int(catalog_row.get("enabled", 1)) == 1,
+                            )
+                        ),
+                        "total_volume": 0.0,
+                        "total_sets": 0,
+                        "total_trainings": 0,
+                        "last_used": None,
+                        "top_exercise": None,
+                    }
+
                 row["personal_volume"] = float(personal_row.get("total_volume", 0.0))
                 row["household_volume"] = float(household_row.get("total_volume", 0.0))
                 row["personal_sets"] = int(personal_row.get("total_sets", 0))
                 row["household_sets"] = int(household_row.get("total_sets", 0))
-            self._equipment_statistics = equipment_global
+                merged_equipment_statistics.append(row)
+
+            self._equipment_statistics = merged_equipment_statistics
             self._equipment_statistics_by_id = {
-                str(row.get("equipment_id") or ""): row for row in equipment_global if row.get("equipment_id")
+                str(row.get("equipment_id") or ""): row
+                for row in merged_equipment_statistics
+                if row.get("equipment_id")
             }
             for row in self._exercise_statistics:
                 exercise_id = str(row.get("exercise_id") or "")
