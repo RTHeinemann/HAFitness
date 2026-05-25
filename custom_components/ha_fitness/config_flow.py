@@ -9,6 +9,7 @@ import voluptuous as vol
 
 from homeassistant import config_entries
 from homeassistant.data_entry_flow import FlowResult
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.selector import (
     NumberSelector,
     NumberSelectorConfig,
@@ -125,7 +126,7 @@ class HAFitnessOptionsFlow(config_entries.OptionsFlow):
                     "assign_exercises_select_equipment",
                 ],
             )
-        except Exception:
+        except (HomeAssistantError, ValueError, TypeError, KeyError):
             _LOGGER.exception("HA Fitness options flow init failed")
             return self.async_abort(reason="options_flow_error")
 

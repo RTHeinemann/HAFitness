@@ -1505,11 +1505,13 @@ class HAFitnessCoordinator:
             prior = previous.get(equipment_id, {})
             exercises = self.get_exercises_for_equipment(equipment_id)
             valid_exercise_ids = [str(row.get("id") or "") for row in exercises if row.get("id")]
-            active_exercise_id = str(prior.get("active_exercise_id") or "")
-            if not active_exercise_id or active_exercise_id not in valid_exercise_ids:
-                active_exercise_id = valid_exercise_ids[0] if valid_exercise_ids else ""
+            active_exercise_id = (
+                str(prior.get("active_exercise_id")) if prior.get("active_exercise_id") else None
+            )
+            if active_exercise_id not in valid_exercise_ids:
+                active_exercise_id = valid_exercise_ids[0] if valid_exercise_ids else None
             rebuilt[equipment_id] = {
-                "active_exercise_id": active_exercise_id or None,
+                "active_exercise_id": active_exercise_id,
                 "weight": float(prior.get("weight", 0.0)),
                 "reps": int(prior.get("reps", 0)),
                 "notes": str(prior.get("notes", "")),
