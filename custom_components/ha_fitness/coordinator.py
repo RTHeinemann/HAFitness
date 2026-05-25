@@ -1030,17 +1030,17 @@ class HAFitnessCoordinator:
                 household_user_ids
             )
             global_map = {
-                str(row.get("equipment_id")): dict(row)
+                str(row.get("equipment_id")): row
                 for row in equipment_global
                 if row.get("equipment_id")
             }
             personal_map = {
-                str(row.get("equipment_id")): dict(row)
+                str(row.get("equipment_id")): row
                 for row in equipment_personal
                 if row.get("equipment_id")
             }
             household_map = {
-                str(row.get("equipment_id")): dict(row)
+                str(row.get("equipment_id")): row
                 for row in equipment_household
                 if row.get("equipment_id")
             }
@@ -1072,11 +1072,11 @@ class HAFitnessCoordinator:
                 row = global_map.get(equipment_id)
                 if row is None:
                     catalog_row = catalog_map.get(equipment_id, {})
-                    metadata_row: dict[str, Any] = {}
-                    for candidate in (catalog_row, personal_row, household_row):
-                        if candidate:
-                            metadata_row = candidate
-                            break
+                    metadata_row = {**household_row, **personal_row, **catalog_row}
+                    catalog_enabled = catalog_row.get("enabled")
+                    catalog_enabled_default = (
+                        bool(int(catalog_enabled)) if catalog_enabled is not None else True
+                    )
                     row = {
                         "equipment_id": equipment_id,
                         "name": metadata_row.get("name") or equipment_id,
@@ -1085,7 +1085,7 @@ class HAFitnessCoordinator:
                         "enabled": bool(
                             metadata_row.get(
                                 "enabled",
-                                int(catalog_row.get("enabled", 1)) == 1,
+                                catalog_enabled_default,
                             )
                         ),
                         "total_volume": 0.0,
