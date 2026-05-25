@@ -8,7 +8,7 @@ finish_workout:
 
 save_set:
   name: Save Set
-  description: Logs a completed exercise set for the calling Home Assistant user context. If no workout is active for that user, an implicit workout is created and finished automatically.
+  description: Logs a completed exercise set for the calling Home Assistant user context. Exercise can be an exercise_id or a display name. If no workout is active for that user, an implicit workout is created and finished automatically.
   fields:
     exercise:
       name: Exercise
@@ -64,6 +64,124 @@ select_user:
 refresh_users:
   name: Refresh Users
   description: Refreshes known users from the HA Fitness users table and refreshes statistics.
+
+add_exercise:
+  name: Add Exercise
+  description: Adds or reactivates an exercise in the SQLite catalog and refreshes runtime exercise options/statistics.
+  fields:
+    exercise_id:
+      name: Exercise ID
+      description: Stable unique ID (lowercase/underscore recommended), for example bench_press.
+      required: true
+      selector:
+        text:
+    name_en:
+      name: English Name
+      description: English display name.
+      required: true
+      selector:
+        text:
+    name_de:
+      name: German Name
+      description: Optional German display name.
+      required: false
+      selector:
+        text:
+    muscle_group:
+      name: Muscle Group
+      description: Optional muscle group slug (e.g. chest, legs, back).
+      required: false
+      selector:
+        text:
+    equipment:
+      name: Equipment
+      description: Optional equipment label (e.g. barbell, dumbbell, machine).
+      required: false
+      selector:
+        text:
+    enabled:
+      name: Enabled
+      description: Whether the exercise appears in active exercise options.
+      required: false
+      default: true
+      selector:
+        boolean:
+    sort_order:
+      name: Sort Order
+      description: Lower values appear first in the active exercise select.
+      required: false
+      selector:
+        number:
+          min: -10000
+          max: 10000
+          step: 1
+          mode: box
+
+update_exercise:
+  name: Update Exercise
+  description: Updates exercise catalog metadata by exercise_id and refreshes runtime exercise options/statistics.
+  fields:
+    exercise_id:
+      name: Exercise ID
+      description: Existing exercise ID to update.
+      required: true
+      selector:
+        text:
+    name_en:
+      name: English Name
+      description: Optional new English display name.
+      required: false
+      selector:
+        text:
+    name_de:
+      name: German Name
+      description: Optional new German display name.
+      required: false
+      selector:
+        text:
+    muscle_group:
+      name: Muscle Group
+      description: Optional new muscle group slug.
+      required: false
+      selector:
+        text:
+    equipment:
+      name: Equipment
+      description: Optional new equipment label.
+      required: false
+      selector:
+        text:
+    enabled:
+      name: Enabled
+      description: Optional enabled flag.
+      required: false
+      selector:
+        boolean:
+    sort_order:
+      name: Sort Order
+      description: Optional new sort order.
+      required: false
+      selector:
+        number:
+          min: -10000
+          max: 10000
+          step: 1
+          mode: box
+
+disable_exercise:
+  name: Disable Exercise
+  description: Disables an exercise by exercise_id so it no longer appears in active exercise options.
+  fields:
+    exercise_id:
+      name: Exercise ID
+      description: Existing exercise ID to disable.
+      required: true
+      selector:
+        text:
+
+refresh_exercises:
+  name: Refresh Exercises
+  description: Re-seeds default built-in exercises in SQLite and refreshes runtime exercise options/statistics.
 
 refresh_statistics:
   name: Refresh Statistics

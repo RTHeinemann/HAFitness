@@ -12,14 +12,24 @@ from homeassistant.helpers import config_validation as cv
 
 from .const import (
     ATTR_EXERCISE,
+    ATTR_EXERCISE_ID,
+    ATTR_ENABLED,
+    ATTR_EQUIPMENT,
+    ATTR_MUSCLE_GROUP,
+    ATTR_NAME_DE,
+    ATTR_NAME_EN,
     ATTR_NOTES,
     ATTR_REPS,
+    ATTR_SORT_ORDER,
     ATTR_USER_ID,
     ATTR_WEIGHT,
     CONF_DISPLAY_NAME,
     CONF_INCLUDED_USER_IDS,
+    SERVICE_ADD_EXERCISE,
+    SERVICE_DISABLE_EXERCISE,
     DEFAULT_DISPLAY_NAME,
     DOMAIN,
+    SERVICE_REFRESH_EXERCISES,
     SERVICE_EXPORT_DATA,
     SERVICE_FINISH_WORKOUT,
     SERVICE_REFRESH_STATISTICS,
@@ -28,6 +38,7 @@ from .const import (
     SERVICE_SAVE_SET,
     SERVICE_SELECT_USER,
     SERVICE_START_WORKOUT,
+    SERVICE_UPDATE_EXERCISE,
 )
 from .coordinator import HAFitnessCoordinator
 from .storage import HAFitnessStore
@@ -90,6 +101,10 @@ def _register_services(hass: HomeAssistant) -> None:
         SERVICE_EXPORT_DATA,
         SERVICE_SELECT_USER,
         SERVICE_REFRESH_USERS,
+        SERVICE_ADD_EXERCISE,
+        SERVICE_UPDATE_EXERCISE,
+        SERVICE_DISABLE_EXERCISE,
+        SERVICE_REFRESH_EXERCISES,
     )
     if all(hass.services.has_service(DOMAIN, service) for service in required_services):
         return
@@ -155,6 +170,84 @@ def _register_services(hass: HomeAssistant) -> None:
             await coordinator.async_refresh_users()
             await coordinator.async_refresh_statistics()
 
+    async def handle_add_exercise(call: ServiceCall) -> None:
+        exercise_id: str = call.data[ATTR_EXERCISE_ID].strip().lower()
+        name_en: str = call.data[ATTR_NAME_EN].strip()
+        name_de: str | None = _optional_str(call.data.get(ATTR_NAME_DE))
+        muscle_group: str | None = _optional_str(call.data.get(ATTR_MUSCLE_GROUP))
+        equipment: str | None = _optional_str(call.data.get(ATTR_EQUIPMENT))
+        enabled: bool = bool(call.data.get(ATTR_ENABLED, True))
+        sort_order: int = int(call.data.get(ATTR_SORT_ORDER, 0))
+
+        if not exercise_id:
+            raise HomeAssistantError("exercise_id must not be empty.")
+        if not name_en:
+            raise HomeAssistantError("name_en must not be empty.")
+
+        for coordinator in _all_coordinators():
+            await coordinator.async_add_exercise(
+                exercise_id=exercise_id,
+                name_en=name_en,
+                name_de=name_de,
+                muscle_group=muscle_group,
+                equipment=equipment,
+                enabled=enabled,
+                sort_order=sort_order,
+            )
+
+    async def handle_update_exercise(call: ServiceCall) -> None:
+        exercise_id: str = call.data[ATTR_EXERCISE_ID].strip().lower()
+        if not exercise_id:
+            raise HomeAssistantError("exercise_id must not be empty.")
+
+        raw_name_en = call.data.get(ATTR_NAME_EN)
+        name_en = raw_name_en.strip() if isinstance(raw_name_en, str) else None
+        raw_name_de = call.data.get(ATTR_NAME_DE)
+        name_de = raw_name_de.strip() if isinstance(raw_name_de, str) else None
+        raw_muscle_group = call.data.get(ATTR_MUSCLE_GROUP)
+        muscle_group = raw_muscle_group.strip() if isinstance(raw_muscle_group, str) else None
+        raw_equipment = call.data.get(ATTR_EQUIPMENT)
+        equipment = raw_equipment.strip() if isinstance(raw_equipment, str) else None
+        enabled = call.data.get(ATTR_ENABLED)
+        sort_order = call.data.get(ATTR_SORT_ORDER)
+
+        if (
+            name_en is None
+            and name_de is None
+            and muscle_group is None
+            and equipment is None
+            and enabled is None
+            and sort_order is None
+        ):
+            raise HomeAssistantError("No update fields provided for update_exercise.")
+
+        for coordinator in _all_coordinators():
+            updated = await coordinator.async_update_exercise(
+                exercise_id=exercise_id,
+                name_en=name_en,
+                name_de=name_de,
+                muscle_group=muscle_group,
+                equipment=equipment,
+                enabled=bool(enabled) if enabled is not None else None,
+                sort_order=int(sort_order) if sort_order is not None else None,
+            )
+            if not updated:
+                raise HomeAssistantError(f"Exercise '{exercise_id}' not found or unchanged.")
+
+    async def handle_disable_exercise(call: ServiceCall) -> None:
+        exercise_id: str = call.data[ATTR_EXERCISE_ID].strip().lower()
+        if not exercise_id:
+            raise HomeAssistantError("exercise_id must not be empty.")
+
+        for coordinator in _all_coordinators():
+            updated = await coordinator.async_disable_exercise(exercise_id)
+            if not updated:
+                raise HomeAssistantError(f"Exercise '{exercise_id}' not found.")
+
+    async def handle_refresh_exercises(call: ServiceCall) -> None:
+        for coordinator in _all_coordinators():
+            await coordinator.async_reload_exercise_catalog()
+
     hass.services.async_register(DOMAIN, SERVICE_START_WORKOUT, handle_start_workout)
     hass.services.async_register(DOMAIN, SERVICE_FINISH_WORKOUT, handle_finish_workout)
     hass.services.async_register(
@@ -188,6 +281,49 @@ def _register_services(hass: HomeAssistant) -> None:
         schema=vol.Schema({vol.Optional(ATTR_USER_ID): cv.string}),
     )
     hass.services.async_register(DOMAIN, SERVICE_REFRESH_USERS, handle_refresh_users)
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_ADD_EXERCISE,
+        handle_add_exercise,
+        schema=vol.Schema(
+            {
+                vol.Required(ATTR_EXERCISE_ID): cv.string,
+                vol.Required(ATTR_NAME_EN): cv.string,
+                vol.Optional(ATTR_NAME_DE): cv.string,
+                vol.Optional(ATTR_MUSCLE_GROUP): cv.string,
+                vol.Optional(ATTR_EQUIPMENT): cv.string,
+                vol.Optional(ATTR_ENABLED): cv.boolean,
+                vol.Optional(ATTR_SORT_ORDER): vol.Coerce(int),
+            }
+        ),
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_UPDATE_EXERCISE,
+        handle_update_exercise,
+        schema=vol.Schema(
+            {
+                vol.Required(ATTR_EXERCISE_ID): cv.string,
+                vol.Optional(ATTR_NAME_EN): cv.string,
+                vol.Optional(ATTR_NAME_DE): cv.string,
+                vol.Optional(ATTR_MUSCLE_GROUP): cv.string,
+                vol.Optional(ATTR_EQUIPMENT): cv.string,
+                vol.Optional(ATTR_ENABLED): cv.boolean,
+                vol.Optional(ATTR_SORT_ORDER): vol.Coerce(int),
+            }
+        ),
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_DISABLE_EXERCISE,
+        handle_disable_exercise,
+        schema=vol.Schema({vol.Required(ATTR_EXERCISE_ID): cv.string}),
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_REFRESH_EXERCISES,
+        handle_refresh_exercises,
+    )
 
 
 def _unregister_services(hass: HomeAssistant) -> None:
@@ -201,6 +337,17 @@ def _unregister_services(hass: HomeAssistant) -> None:
         SERVICE_EXPORT_DATA,
         SERVICE_SELECT_USER,
         SERVICE_REFRESH_USERS,
+        SERVICE_ADD_EXERCISE,
+        SERVICE_UPDATE_EXERCISE,
+        SERVICE_DISABLE_EXERCISE,
+        SERVICE_REFRESH_EXERCISES,
     ):
         if hass.services.has_service(DOMAIN, service):
             hass.services.async_remove(DOMAIN, service)
+
+
+def _optional_str(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip()
+    return normalized if normalized else None

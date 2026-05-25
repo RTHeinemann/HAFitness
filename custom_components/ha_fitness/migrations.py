@@ -4,9 +4,9 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import sqlite3
 
-from .const import LEGACY_USER_ID, LEGACY_USER_NAME
+from .const import DEFAULT_EXERCISES, LEGACY_USER_ID, LEGACY_USER_NAME
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 
 def apply_migrations(conn: sqlite3.Connection) -> None:
@@ -29,6 +29,10 @@ def apply_migrations(conn: sqlite3.Connection) -> None:
 
     if current_version < 2:
         _apply_v2(conn)
+        current_version = 2
+
+    if current_version < 3:
+        _apply_v3(conn)
 
 
 def _apply_v1(conn: sqlite3.Connection) -> None:
@@ -124,10 +128,104 @@ def _apply_v2(conn: sqlite3.Connection) -> None:
     )
 
 
+def _apply_v3(conn: sqlite3.Connection) -> None:
+    """Add exercises catalog and set_logs.exercise_id with backfill."""
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS exercises (
+            id TEXT PRIMARY KEY,
+            name_en TEXT NOT NULL,
+            name_de TEXT,
+            muscle_group TEXT,
+            equipment TEXT,
+            enabled INTEGER NOT NULL DEFAULT 1,
+            sort_order INTEGER DEFAULT 0,
+            created_at TEXT NOT NULL
+        );
+        """
+    )
+
+    if not _column_exists(conn, "set_logs", "exercise_id"):
+        conn.execute("ALTER TABLE set_logs ADD COLUMN exercise_id TEXT")
+
+    now = datetime.now(timezone.utc).isoformat()
+    for exercise in DEFAULT_EXERCISES:
+        conn.execute(
+            """
+            INSERT INTO exercises(id, name_en, name_de, muscle_group, equipment, enabled, sort_order, created_at)
+            VALUES(?, ?, ?, ?, ?, 1, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                name_en = excluded.name_en,
+                name_de = excluded.name_de,
+                muscle_group = excluded.muscle_group,
+                equipment = COALESCE(exercises.equipment, excluded.equipment),
+                enabled = 1,
+                sort_order = excluded.sort_order
+            """,
+            (
+                str(exercise["id"]),
+                str(exercise["name_en"]),
+                exercise["name_de"],
+                exercise["muscle_group"],
+                exercise["equipment"],
+                int(exercise["sort_order"]),
+                now,
+            ),
+        )
+
+    conn.execute(
+        """
+        UPDATE set_logs
+        SET exercise_id = CASE lower(trim(exercise))
+            WHEN 'bench press' THEN 'bench_press'
+            WHEN 'bankdrücken' THEN 'bench_press'
+            WHEN 'bench_press' THEN 'bench_press'
+            WHEN 'squat' THEN 'squat'
+            WHEN 'kniebeuge' THEN 'squat'
+            WHEN 'deadlift' THEN 'deadlift'
+            WHEN 'kreuzheben' THEN 'deadlift'
+            WHEN 'shoulder press' THEN 'shoulder_press'
+            WHEN 'schulterdrücken' THEN 'shoulder_press'
+            WHEN 'shoulder_press' THEN 'shoulder_press'
+            WHEN 'row' THEN 'row'
+            WHEN 'rudern' THEN 'row'
+            WHEN 'lat pulldown' THEN 'lat_pulldown'
+            WHEN 'lat_pulldown' THEN 'lat_pulldown'
+            WHEN 'latzug' THEN 'lat_pulldown'
+            WHEN 'bicep curl' THEN 'bicep_curl'
+            WHEN 'bizepscurls' THEN 'bicep_curl'
+            WHEN 'bicep_curl' THEN 'bicep_curl'
+            WHEN 'tricep pushdown' THEN 'tricep_pushdown'
+            WHEN 'trizepsdrücken' THEN 'tricep_pushdown'
+            WHEN 'tricep_pushdown' THEN 'tricep_pushdown'
+            ELSE exercise_id
+        END
+        WHERE exercise_id IS NULL
+        """
+    )
+
+    conn.executescript(
+        """
+        CREATE INDEX IF NOT EXISTS idx_set_logs_exercise_id_created_at
+            ON set_logs(exercise_id, created_at);
+        CREATE INDEX IF NOT EXISTS idx_set_logs_user_id_exercise_id_created_at
+            ON set_logs(user_id, exercise_id, created_at);
+        CREATE INDEX IF NOT EXISTS idx_exercises_enabled_sort_order
+            ON exercises(enabled, sort_order, name_en);
+        """
+    )
+
+    conn.execute(
+        "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(?, ?)",
+        (3, now),
+    )
+
+
 def _column_exists(conn: sqlite3.Connection, table: str, column: str) -> bool:
     pragma_sql_by_table = {
         "workouts": "PRAGMA table_info(workouts)",
         "set_logs": "PRAGMA table_info(set_logs)",
+        "exercises": "PRAGMA table_info(exercises)",
     }
     pragma_sql = pragma_sql_by_table.get(table)
     if pragma_sql is None:

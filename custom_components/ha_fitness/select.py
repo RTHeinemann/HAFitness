@@ -7,7 +7,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN, EXERCISES
+from .const import DOMAIN
 from .coordinator import HAFitnessCoordinator
 
 
@@ -26,7 +26,6 @@ class HAFitnessActiveExerciseSelect(SelectEntity):
 
     _attr_has_entity_name = True
     _attr_translation_key = "active_exercise"
-    _attr_options = EXERCISES
 
     def __init__(
         self, coordinator: HAFitnessCoordinator, entry: ConfigEntry
@@ -53,8 +52,12 @@ class HAFitnessActiveExerciseSelect(SelectEntity):
 
     @property
     def current_option(self) -> str | None:
-        return self._coordinator.active_exercise
+        return self._coordinator.active_exercise_display
+
+    @property
+    def options(self) -> list[str]:
+        return self._coordinator.exercise_options
 
     async def async_select_option(self, option: str) -> None:
         """Handle option selection."""
-        self._coordinator.set_active_exercise(option)
+        self._coordinator.set_active_exercise_option(option)
