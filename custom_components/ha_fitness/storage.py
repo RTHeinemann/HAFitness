@@ -459,6 +459,9 @@ class HAFitnessStore:
             if row["id"] is not None and str(row["id"]) != ""
         ]
         if not resolved:
+            _LOGGER.debug(
+                "HA Fitness: no enabled users found in users table, falling back to legacy user"
+            )
             return [LEGACY_USER_ID]
         return resolved
 

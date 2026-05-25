@@ -331,8 +331,8 @@ class HAFitnessCoordinator:
     async def resolve_user_id(self, context_user_id: str | None) -> str:
         """Resolve effective user id from service context and upsert into users table."""
         resolved = context_user_id or self._selected_user_id or self._current_user_id or LEGACY_USER_ID
-        display_name = context_user_id if context_user_id else resolved
-        await self._store.async_upsert_user(resolved, display_name)
+        fallback_display_name = context_user_id if context_user_id else resolved
+        await self._store.async_upsert_user(resolved, fallback_display_name)
 
         if context_user_id:
             self._current_user_id = resolved
