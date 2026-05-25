@@ -525,8 +525,12 @@ def _coerce_int(value: Any, fallback: int) -> int:
 def _is_valid_sort_order_input(value: Any) -> bool:
     if isinstance(value, bool):
         return False
+    if isinstance(value, int):
+        return True
+    if isinstance(value, float):
+        return value.is_integer()
     try:
-        float(value)
+        parsed = float(value)
     except (TypeError, ValueError):
         return False
-    return True
+    return parsed.is_integer()
