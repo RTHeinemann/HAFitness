@@ -29,7 +29,7 @@ from .const import (
     DOMAIN,
 )
 
-_EXERCISE_ID_PATTERN = re.compile(r"^[a-z0-9_-]+$")
+_EXERCISE_ID_PATTERN = re.compile(r"^[a-z0-9_]+$")
 _DEFAULT_SORT_ORDER = 100
 _MUSCLE_GROUP_OPTIONS = [
     "chest",
