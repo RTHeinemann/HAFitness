@@ -9,7 +9,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN, EXERCISES, LEGACY_USER_ID, STATE_ACTIVE
+from .const import DOMAIN, EXERCISE_IDS, LEGACY_USER_ID, STATE_ACTIVE
 from .coordinator import HAFitnessCoordinator
 
 
@@ -42,13 +42,13 @@ async def async_setup_entry(
         HAFitnessHouseholdRecentSetsSensor(coordinator, entry),
     ]
 
-    for exercise in EXERCISES:
-        entities.append(HAFitnessPRByExerciseSensor(coordinator, entry, exercise))
-        entities.append(HAFitnessVolumeByExerciseSensor(coordinator, entry, exercise))
-        entities.append(HAFitnessPersonalPRByExerciseSensor(coordinator, entry, exercise))
-        entities.append(HAFitnessPersonalVolumeByExerciseSensor(coordinator, entry, exercise))
-        entities.append(HAFitnessHouseholdPRByExerciseSensor(coordinator, entry, exercise))
-        entities.append(HAFitnessHouseholdVolumeByExerciseSensor(coordinator, entry, exercise))
+    for exercise_id in EXERCISE_IDS:
+        entities.append(HAFitnessPRByExerciseSensor(coordinator, entry, exercise_id))
+        entities.append(HAFitnessVolumeByExerciseSensor(coordinator, entry, exercise_id))
+        entities.append(HAFitnessPersonalPRByExerciseSensor(coordinator, entry, exercise_id))
+        entities.append(HAFitnessPersonalVolumeByExerciseSensor(coordinator, entry, exercise_id))
+        entities.append(HAFitnessHouseholdPRByExerciseSensor(coordinator, entry, exercise_id))
+        entities.append(HAFitnessHouseholdVolumeByExerciseSensor(coordinator, entry, exercise_id))
 
     async_add_entities(entities)
 
@@ -126,7 +126,7 @@ class HAFitnessActiveExerciseSensor(_HAFitnessSensorBase):
 
     @property
     def native_value(self) -> str:
-        return self._coordinator.active_exercise or "none"
+        return self._coordinator.active_exercise_display or "none"
 
 
 class HAFitnessCurrentSetNumberSensor(_HAFitnessSensorBase):
@@ -193,7 +193,7 @@ class HAFitnessActiveWorkoutSummarySensor(_HAFitnessSensorBase):
         coord = self._coordinator
         if coord.workout_state != STATE_ACTIVE:
             return "inactive"
-        return coord.active_exercise or "active"
+        return coord.active_exercise_display or "active"
 
     @property
     def extra_state_attributes(self) -> dict:
@@ -204,7 +204,8 @@ class HAFitnessActiveWorkoutSummarySensor(_HAFitnessSensorBase):
             "workout_state": coord.workout_state,
             "current_workout_id": coord.current_workout_id,
             "current_workout_started_at": coord.current_workout_started_at,
-            "active_exercise": coord.active_exercise,
+            "active_exercise": coord.active_exercise_display,
+            "active_exercise_id": coord.active_exercise,
             "weight": coord.weight,
             "reps": coord.reps,
             "notes": coord.notes,

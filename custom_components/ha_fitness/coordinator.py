@@ -12,7 +12,7 @@ from typing import Any
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 
-from .const import EXERCISES, LEGACY_USER_ID, STATE_ACTIVE, STATE_READY
+from .const import EXERCISE_IDS, LEGACY_USER_ID, STATE_ACTIVE, STATE_READY
 from .storage import HAFitnessStore
 
 _LOGGER = logging.getLogger(__name__)
@@ -37,7 +37,7 @@ class HAFitnessCoordinator:
         self._current_workout_started_at: str | None = None
         self._current_workout_user_id: str | None = None
         self._workout_state: str = STATE_READY
-        self._active_exercise: str | None = None
+        self._active_exercise_id: str | None = None
         self._weight: float = 0.0
         self._reps: int = 0
         self._notes: str = ""
@@ -48,9 +48,15 @@ class HAFitnessCoordinator:
         self._total_sets: int = 0
         self._total_workouts: int = 0
         self._recent_sets: list[dict[str, Any]] = []
-        self._pr_by_exercise: dict[str, float] = {exercise: 0.0 for exercise in EXERCISES}
+        self._exercises: list[dict[str, Any]] = []
+        self._exercise_by_id: dict[str, dict[str, Any]] = {}
+        self._exercise_display_to_id: dict[str, str] = {}
+        self._exercise_options: list[str] = []
+        self._locale: str = str(hass.config.language or "en")
+
+        self._pr_by_exercise: dict[str, float] = {exercise_id: 0.0 for exercise_id in EXERCISE_IDS}
         self._volume_by_exercise: dict[str, float] = {
-            exercise: 0.0 for exercise in EXERCISES
+            exercise_id: 0.0 for exercise_id in EXERCISE_IDS
         }
 
         self._current_user_id: str | None = None
@@ -61,10 +67,10 @@ class HAFitnessCoordinator:
         self._personal_total_workouts: int = 0
         self._personal_recent_sets: list[dict[str, Any]] = []
         self._personal_pr_by_exercise: dict[str, float] = {
-            exercise: 0.0 for exercise in EXERCISES
+            exercise_id: 0.0 for exercise_id in EXERCISE_IDS
         }
         self._personal_volume_by_exercise: dict[str, float] = {
-            exercise: 0.0 for exercise in EXERCISES
+            exercise_id: 0.0 for exercise_id in EXERCISE_IDS
         }
 
         self._household_total_volume: float = 0.0
@@ -72,10 +78,10 @@ class HAFitnessCoordinator:
         self._household_total_workouts: int = 0
         self._household_recent_sets: list[dict[str, Any]] = []
         self._household_pr_by_exercise: dict[str, float] = {
-            exercise: 0.0 for exercise in EXERCISES
+            exercise_id: 0.0 for exercise_id in EXERCISE_IDS
         }
         self._household_volume_by_exercise: dict[str, float] = {
-            exercise: 0.0 for exercise in EXERCISES
+            exercise_id: 0.0 for exercise_id in EXERCISE_IDS
         }
         self._listeners: list[Callable[[], None]] = []
 
@@ -97,7 +103,13 @@ class HAFitnessCoordinator:
 
     @property
     def active_exercise(self) -> str | None:
-        return self._active_exercise
+        return self._active_exercise_id
+
+    @property
+    def active_exercise_display(self) -> str | None:
+        if self._active_exercise_id is None:
+            return None
+        return self.exercise_display_name(self._active_exercise_id)
 
     @property
     def weight(self) -> float:
@@ -150,6 +162,14 @@ class HAFitnessCoordinator:
     @property
     def users(self) -> list[dict[str, Any]]:
         return self._users
+
+    @property
+    def exercises(self) -> list[dict[str, Any]]:
+        return self._exercises
+
+    @property
+    def exercise_options(self) -> list[str]:
+        return self._exercise_options
 
     @property
     def included_user_ids(self) -> list[str] | None:
@@ -229,10 +249,23 @@ class HAFitnessCoordinator:
     # Setters (called by entities)
     # ------------------------------------------------------------------
 
-    def set_active_exercise(self, exercise: str) -> None:
-        """Update the currently selected exercise."""
-        self._active_exercise = exercise
-        _LOGGER.debug("HA Fitness: active exercise set to %s", exercise)
+    def set_active_exercise(self, exercise_id: str) -> None:
+        """Update the currently selected exercise by stable id."""
+        if exercise_id not in self._exercise_by_id:
+            _LOGGER.warning("HA Fitness: unknown exercise_id '%s' ignored", exercise_id)
+            return
+        self._active_exercise_id = exercise_id
+        _LOGGER.debug("HA Fitness: active exercise set to %s", exercise_id)
+        self._notify_listeners()
+
+    def set_active_exercise_option(self, option: str) -> None:
+        """Set active exercise using localized select option label."""
+        exercise_id = self._exercise_display_to_id.get(option)
+        if exercise_id is None:
+            _LOGGER.warning("HA Fitness: unknown exercise option '%s' ignored", option)
+            return
+        self._active_exercise_id = exercise_id
+        _LOGGER.debug("HA Fitness: active exercise option set to %s -> %s", option, exercise_id)
         self._notify_listeners()
 
     def set_weight(self, weight: float) -> None:
@@ -263,6 +296,139 @@ class HAFitnessCoordinator:
         await self.async_refresh_statistics(notify=False)
         self._notify_listeners()
 
+    async def async_refresh_exercises(self, notify: bool = True) -> None:
+        """Refresh exercise catalog and localized select options from storage."""
+        try:
+            rows = await self._store.async_get_exercises(enabled_only=False)
+        except sqlite3.Error as err:
+            _LOGGER.exception("HA Fitness: failed to refresh exercises")
+            raise HomeAssistantError("Failed to refresh exercises") from err
+
+        self._exercises = rows
+        self._exercise_by_id = {
+            str(row["id"]): row for row in rows if row.get("id") is not None
+        }
+        self._exercise_display_to_id = {}
+        enabled_rows = [row for row in rows if int(row.get("enabled", 1)) == 1]
+        enabled_rows.sort(
+            key=lambda row: (
+                int(row.get("sort_order", 0)),
+                str(row.get("name_en") or row.get("id") or ""),
+                str(row.get("id") or ""),
+            )
+        )
+
+        options: list[str] = []
+        for row in enabled_rows:
+            exercise_id = str(row["id"])
+            display = self.exercise_display_name(exercise_id)
+            options.append(display)
+            self._exercise_display_to_id[display] = exercise_id
+        self._exercise_options = options
+
+        if self._active_exercise_id not in self._exercise_by_id:
+            self._active_exercise_id = None
+        if self._active_exercise_id is None and enabled_rows:
+            self._active_exercise_id = str(enabled_rows[0]["id"])
+
+        if notify:
+            self._notify_listeners()
+
+    async def async_add_exercise(
+        self,
+        exercise_id: str,
+        name_en: str,
+        name_de: str | None = None,
+        muscle_group: str | None = None,
+        equipment: str | None = None,
+        enabled: bool = True,
+        sort_order: int = 0,
+    ) -> None:
+        """Add one exercise and refresh runtime exercise/stat caches."""
+        await self._store.async_add_exercise(
+            exercise_id=exercise_id,
+            name_en=name_en,
+            name_de=name_de,
+            muscle_group=muscle_group,
+            equipment=equipment,
+            enabled=enabled,
+            sort_order=sort_order,
+        )
+        await self.async_refresh_exercises(notify=False)
+        await self.async_refresh_statistics(notify=False)
+        self._notify_listeners()
+
+    async def async_update_exercise(
+        self,
+        exercise_id: str,
+        name_en: str | None = None,
+        name_de: str | None = None,
+        muscle_group: str | None = None,
+        equipment: str | None = None,
+        enabled: bool | None = None,
+        sort_order: int | None = None,
+    ) -> bool:
+        """Update one exercise and refresh runtime caches if changed."""
+        updated = await self._store.async_update_exercise(
+            exercise_id=exercise_id,
+            name_en=name_en,
+            name_de=name_de,
+            muscle_group=muscle_group,
+            equipment=equipment,
+            enabled=enabled,
+            sort_order=sort_order,
+        )
+        if updated:
+            await self.async_refresh_exercises(notify=False)
+            await self.async_refresh_statistics(notify=False)
+            self._notify_listeners()
+        return updated
+
+    async def async_disable_exercise(self, exercise_id: str) -> bool:
+        """Disable one exercise and refresh runtime caches if changed."""
+        updated = await self._store.async_disable_exercise(exercise_id)
+        if updated:
+            await self.async_refresh_exercises(notify=False)
+            await self.async_refresh_statistics(notify=False)
+            self._notify_listeners()
+        return updated
+
+    async def async_reload_exercise_catalog(self) -> None:
+        """Re-seed defaults and refresh runtime exercise/stat caches."""
+        await self._store.async_refresh_exercises()
+        await self.async_refresh_exercises(notify=False)
+        await self.async_refresh_statistics(notify=False)
+        self._notify_listeners()
+
+    def exercise_display_name(self, exercise_id: str | None) -> str:
+        """Return localized exercise display name for one id."""
+        if not exercise_id:
+            return "Unknown"
+        row = self._exercise_by_id.get(exercise_id)
+        if row is None:
+            return exercise_id
+        locale = self._locale.lower()
+        if locale.startswith("de"):
+            return str(row.get("name_de") or row.get("name_en") or exercise_id)
+        return str(row.get("name_en") or row.get("name_de") or exercise_id)
+
+    def exercise_id_from_input(self, exercise: str) -> str | None:
+        """Resolve exercise id from id or localized label/name."""
+        normalized = exercise.strip().lower()
+        if not normalized:
+            return None
+        if normalized in self._exercise_by_id:
+            return normalized
+        for exercise_id, row in self._exercise_by_id.items():
+            candidates = [
+                exercise_id,
+                str(row.get("name_en") or ""),
+                str(row.get("name_de") or ""),
+            ]
+            if any(normalized == candidate.strip().lower() for candidate in candidates if candidate):
+                return exercise_id
+        return None
+
     # ------------------------------------------------------------------
     # Startup and statistics
     # ------------------------------------------------------------------
@@ -272,6 +438,7 @@ class HAFitnessCoordinator:
         try:
             await self.resolve_user_id(None)
             await self.async_refresh_users()
+            await self.async_refresh_exercises(notify=False)
 
             open_workout = await self._store.async_get_current_open_workout(self._selected_user_id or LEGACY_USER_ID)
             if open_workout is not None:
@@ -301,7 +468,11 @@ class HAFitnessCoordinator:
                     summary_set_number = await self._store.async_get_set_count()
                 self._last_set_summary = self._format_set_summary(
                     set_number=summary_set_number,
-                    exercise=str(last_set["exercise"]),
+                    exercise=self.exercise_display_name(
+                        str(last_set.get("exercise_id")) if last_set.get("exercise_id") else None
+                    )
+                    if last_set.get("exercise_id")
+                    else str(last_set["exercise"]),
                     weight=float(last_set["weight"]),
                     reps=int(last_set["reps"]),
                 )
@@ -374,30 +545,30 @@ class HAFitnessCoordinator:
                 10, household_user_ids
             )
 
-            for exercise in EXERCISES:
-                self._pr_by_exercise[exercise] = await self._store.async_get_pr_by_exercise(exercise)
+            for exercise_id in EXERCISE_IDS:
+                self._pr_by_exercise[exercise_id] = await self._store.async_get_pr_by_exercise(exercise_id)
                 self._volume_by_exercise[
-                    exercise
-                ] = await self._store.async_get_total_volume_by_exercise(exercise)
+                    exercise_id
+                ] = await self._store.async_get_total_volume_by_exercise(exercise_id)
 
-                self._personal_pr_by_exercise[exercise] = await self._store.async_get_pr_by_exercise(
-                    exercise, personal_user_id
+                self._personal_pr_by_exercise[exercise_id] = await self._store.async_get_pr_by_exercise(
+                    exercise_id, personal_user_id
                 )
                 self._personal_volume_by_exercise[
-                    exercise
+                    exercise_id
                 ] = await self._store.async_get_total_volume_by_exercise(
-                    exercise, personal_user_id
+                    exercise_id, personal_user_id
                 )
 
                 self._household_pr_by_exercise[
-                    exercise
+                    exercise_id
                 ] = await self._store.async_get_household_pr_by_exercise(
-                    exercise, household_user_ids
+                    exercise_id, household_user_ids
                 )
                 self._household_volume_by_exercise[
-                    exercise
+                    exercise_id
                 ] = await self._store.async_get_household_total_volume_by_exercise(
-                    exercise, household_user_ids
+                    exercise_id, household_user_ids
                 )
         except sqlite3.Error as err:
             _LOGGER.exception("HA Fitness: failed to refresh statistics")
@@ -550,7 +721,7 @@ class HAFitnessCoordinator:
                 )
 
         errors = self._validate_set_inputs(
-            exercise=self._active_exercise,
+            exercise_id=self._active_exercise_id,
             weight=self._weight,
             reps=self._reps,
             require_active_workout=True,
@@ -572,7 +743,8 @@ class HAFitnessCoordinator:
             user_id=user_id,
             workout_id=self._current_workout_id,
             set_number=self._current_set_number + 1,
-            exercise=self._active_exercise,  # type: ignore[arg-type]
+            exercise_id=self._active_exercise_id,  # type: ignore[arg-type]
+            exercise_display=self.exercise_display_name(self._active_exercise_id),
             weight=self._weight,
             reps=self._reps,
             notes=self._notes or None,
@@ -590,9 +762,13 @@ class HAFitnessCoordinator:
     ) -> None:
         """Save a set with explicitly provided data (used by service call)."""
         user_id = await self.resolve_user_id(context_user_id)
+        exercise_id = self.exercise_id_from_input(exercise)
+        exercise_display = (
+            self.exercise_display_name(exercise_id) if exercise_id is not None else exercise.strip()
+        )
 
         errors = self._validate_set_inputs(
-            exercise=exercise,
+            exercise_id=exercise_id if exercise_id is not None else exercise.strip(),
             weight=weight,
             reps=reps,
             require_active_workout=False,
@@ -619,7 +795,8 @@ class HAFitnessCoordinator:
                 user_id=user_id,
                 workout_id=self._current_workout_id,
                 set_number=self._current_set_number + 1,
-                exercise=exercise,
+                exercise_id=exercise_id,
+                exercise_display=exercise_display,
                 weight=weight,
                 reps=reps,
                 notes=notes,
@@ -637,7 +814,8 @@ class HAFitnessCoordinator:
                     user_id=user_id,
                     workout_id=workout_id,
                     set_number=set_number,
-                    exercise=exercise,
+                    exercise_id=exercise_id,
+                    exercise_display=exercise_display,
                     weight=weight,
                     reps=reps,
                     notes=notes,
@@ -649,7 +827,8 @@ class HAFitnessCoordinator:
                     user_id=user_id,
                     workout_id=workout_id,
                     set_number=1,
-                    exercise=exercise,
+                    exercise_id=exercise_id,
+                    exercise_display=exercise_display,
                     weight=weight,
                     reps=reps,
                     notes=notes,
@@ -670,7 +849,7 @@ class HAFitnessCoordinator:
 
     def _validate_set_inputs(
         self,
-        exercise: str | None,
+        exercise_id: str | None,
         weight: float,
         reps: int,
         *,
@@ -683,7 +862,7 @@ class HAFitnessCoordinator:
             errors.append("No active workout. Press Start Workout first.")
         if require_current_workout_id and self._current_workout_id is None:
             errors.append("No active workout id. Press Start Workout again.")
-        if not exercise:
+        if not exercise_id:
             errors.append("No exercise selected.")
         if weight <= 0:
             errors.append("Weight must be greater than 0.")
@@ -696,7 +875,8 @@ class HAFitnessCoordinator:
         user_id: str,
         workout_id: int | None,
         set_number: int,
-        exercise: str,
+        exercise_id: str | None,
+        exercise_display: str,
         weight: float,
         reps: int,
         notes: str | None,
@@ -708,7 +888,8 @@ class HAFitnessCoordinator:
             set_id = await self._store.async_save_set(
                 user_id=user_id,
                 workout_id=workout_id,
-                exercise=exercise,
+                exercise=exercise_display,
+                exercise_id=exercise_id,
                 weight=weight,
                 reps=reps,
                 volume=volume,
@@ -721,7 +902,7 @@ class HAFitnessCoordinator:
 
         self._last_set_summary = self._format_set_summary(
             set_number=set_number,
-            exercise=exercise,
+            exercise=exercise_display,
             weight=weight,
             reps=reps,
         )
@@ -730,7 +911,8 @@ class HAFitnessCoordinator:
             "user_id": user_id,
             "workout_id": workout_id,
             "set_number": set_number,
-            "exercise": exercise,
+            "exercise": exercise_display,
+            "exercise_id": exercise_id,
             "weight": weight,
             "reps": reps,
             "volume": volume,

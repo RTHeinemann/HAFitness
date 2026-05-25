@@ -24,22 +24,100 @@ SERVICE_REFRESH_STATISTICS = "refresh_statistics"
 SERVICE_EXPORT_DATA = "export_data"
 SERVICE_SELECT_USER = "select_user"
 SERVICE_REFRESH_USERS = "refresh_users"
+SERVICE_ADD_EXERCISE = "add_exercise"
+SERVICE_UPDATE_EXERCISE = "update_exercise"
+SERVICE_DISABLE_EXERCISE = "disable_exercise"
+SERVICE_REFRESH_EXERCISES = "refresh_exercises"
 
 # Service field names
 ATTR_EXERCISE = "exercise"
+ATTR_EXERCISE_ID = "exercise_id"
 ATTR_WEIGHT = "weight"
 ATTR_REPS = "reps"
 ATTR_NOTES = "notes"
 ATTR_USER_ID = "user_id"
+ATTR_NAME_EN = "name_en"
+ATTR_NAME_DE = "name_de"
+ATTR_MUSCLE_GROUP = "muscle_group"
+ATTR_EQUIPMENT = "equipment"
+ATTR_ENABLED = "enabled"
+ATTR_SORT_ORDER = "sort_order"
 
-# Available exercises for the select entity
-EXERCISES: list[str] = [
-    "Bench Press",
-    "Squat",
-    "Deadlift",
-    "Shoulder Press",
-    "Row",
-    "Lat Pulldown",
-    "Bicep Curl",
-    "Tricep Pushdown",
+# Stable default exercise IDs (also used by existing per-exercise sensors)
+EXERCISE_IDS: list[str] = [
+    "bench_press",
+    "squat",
+    "deadlift",
+    "shoulder_press",
+    "row",
+    "lat_pulldown",
+    "bicep_curl",
+    "tricep_pushdown",
+]
+
+DEFAULT_EXERCISES: list[dict[str, object]] = [
+    {
+        "id": "bench_press",
+        "name_en": "Bench Press",
+        "name_de": "Bankdrücken",
+        "muscle_group": "chest",
+        "equipment": None,
+        "sort_order": 10,
+    },
+    {
+        "id": "squat",
+        "name_en": "Squat",
+        "name_de": "Kniebeuge",
+        "muscle_group": "legs",
+        "equipment": None,
+        "sort_order": 20,
+    },
+    {
+        "id": "deadlift",
+        "name_en": "Deadlift",
+        "name_de": "Kreuzheben",
+        "muscle_group": "posterior_chain",
+        "equipment": None,
+        "sort_order": 30,
+    },
+    {
+        "id": "shoulder_press",
+        "name_en": "Shoulder Press",
+        "name_de": "Schulterdrücken",
+        "muscle_group": "shoulders",
+        "equipment": None,
+        "sort_order": 40,
+    },
+    {
+        "id": "row",
+        "name_en": "Row",
+        "name_de": "Rudern",
+        "muscle_group": "back",
+        "equipment": None,
+        "sort_order": 50,
+    },
+    {
+        "id": "lat_pulldown",
+        "name_en": "Lat Pulldown",
+        "name_de": "Latzug",
+        "muscle_group": "back",
+        "equipment": None,
+        "sort_order": 60,
+    },
+    {
+        "id": "bicep_curl",
+        "name_en": "Bicep Curl",
+        "name_de": "Bizepscurls",
+        "muscle_group": "biceps",
+        "equipment": None,
+        "sort_order": 70,
+    },
+    {
+        "id": "tricep_pushdown",
+        "name_en": "Tricep Pushdown",
+        "name_de": "Trizepsdrücken",
+        "muscle_group": "triceps",
+        "equipment": None,
+        "sort_order": 80,
+    },
 ]

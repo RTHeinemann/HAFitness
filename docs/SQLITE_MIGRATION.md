@@ -20,7 +20,7 @@ The integration tracks schema versions in `schema_migrations`:
 - `version INTEGER PRIMARY KEY`
 - `applied_at TEXT NOT NULL`
 
-Current schema version: **1**
+Current schema version: **3**
 
 ## Version 1 Schema
 
@@ -49,6 +49,40 @@ Current schema version: **1**
 - `idx_set_logs_created_at`
 - `idx_set_logs_workout_id`
 - `idx_workouts_started_at`
+
+## Version 2 Schema Additions
+
+- `users` table (`id`, `display_name`, `enabled`, `created_at`)
+- `workouts.user_id`
+- `set_logs.user_id`
+- legacy backfill to `user_id = legacy`
+
+## Version 3 Schema Additions (Exercise Catalog)
+
+- `exercises` table:
+  - `id TEXT PRIMARY KEY`
+  - `name_en TEXT NOT NULL`
+  - `name_de TEXT`
+  - `muscle_group TEXT`
+  - `equipment TEXT`
+  - `enabled INTEGER NOT NULL DEFAULT 1`
+  - `sort_order INTEGER DEFAULT 0`
+  - `created_at TEXT NOT NULL`
+- `set_logs.exercise_id TEXT` (nullable for backward compatibility)
+- seeded defaults:
+  - `bench_press` / `Bankdrücken` / `chest`
+  - `squat` / `Kniebeuge` / `legs`
+  - `deadlift` / `Kreuzheben` / `posterior_chain`
+  - `shoulder_press` / `Schulterdrücken` / `shoulders`
+  - `row` / `Rudern` / `back`
+  - `lat_pulldown` / `Latzug` / `back`
+  - `bicep_curl` / `Bizepscurls` / `biceps`
+  - `tricep_pushdown` / `Trizepsdrücken` / `triceps`
+
+Backfill behavior:
+
+- Existing `set_logs.exercise` values are mapped to `exercise_id` where a known default ID/name match exists.
+- Unknown legacy values stay untouched (`exercise_id` remains `NULL`) to avoid data loss.
 
 ## Behavior
 

@@ -259,7 +259,7 @@
     },
     "save_set": {
       "name": "Save Set",
-      "description": "Logs a completed exercise set. Exercise, weight (>0), and reps (>0) are required. If no workout is active, an implicit workout is created and finished automatically.",
+      "description": "Logs a completed exercise set. Exercise can be an exercise_id or a display name. Weight (>0) and reps (>0) are required. If no workout is active, an implicit workout is created and finished automatically.",
       "fields": {
         "exercise": {
           "name": "Exercise",
@@ -304,6 +304,22 @@
     "refresh_users": {
       "name": "Refresh Users",
       "description": "Refreshes known users from SQLite and updates statistics."
+    },
+    "add_exercise": {
+      "name": "Add Exercise",
+      "description": "Adds or reactivates an exercise in the SQLite catalog and refreshes runtime exercise options/statistics."
+    },
+    "update_exercise": {
+      "name": "Update Exercise",
+      "description": "Updates exercise catalog metadata by exercise_id and refreshes runtime exercise options/statistics."
+    },
+    "disable_exercise": {
+      "name": "Disable Exercise",
+      "description": "Disables an exercise by exercise_id so it no longer appears in active exercise options."
+    },
+    "refresh_exercises": {
+      "name": "Refresh Exercises",
+      "description": "Re-seeds default built-in exercises in SQLite and refreshes runtime exercise options/statistics."
     }
   }
 }

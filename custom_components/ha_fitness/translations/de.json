@@ -259,7 +259,7 @@
     },
     "save_set": {
       "name": "Satz speichern",
-      "description": "Protokolliert einen abgeschlossenen Übungssatz. Übung, Gewicht (>0) und Wiederholungen (>0) sind erforderlich. Wenn kein Training aktiv ist, wird ein implizites Training erstellt und direkt beendet.",
+      "description": "Protokolliert einen abgeschlossenen Übungssatz. Übung kann exercise_id oder Anzeigename sein. Gewicht (>0) und Wiederholungen (>0) sind erforderlich. Wenn kein Training aktiv ist, wird ein implizites Training erstellt und direkt beendet.",
       "fields": {
         "exercise": {
           "name": "Übung",
@@ -304,6 +304,22 @@
     "refresh_users": {
       "name": "Benutzer aktualisieren",
       "description": "Aktualisiert bekannte Benutzer aus SQLite und aktualisiert Statistiken."
+    },
+    "add_exercise": {
+      "name": "Übung hinzufügen",
+      "description": "Fügt eine Übung im SQLite-Katalog hinzu oder reaktiviert sie und aktualisiert Laufzeitoptionen/Statistiken."
+    },
+    "update_exercise": {
+      "name": "Übung aktualisieren",
+      "description": "Aktualisiert Übungsmetadaten per exercise_id und aktualisiert Laufzeitoptionen/Statistiken."
+    },
+    "disable_exercise": {
+      "name": "Übung deaktivieren",
+      "description": "Deaktiviert eine Übung per exercise_id, sodass sie nicht mehr in den aktiven Übungsoptionen erscheint."
+    },
+    "refresh_exercises": {
+      "name": "Übungen aktualisieren",
+      "description": "Stellt Standardübungen im SQLite-Katalog wieder her und aktualisiert Laufzeitoptionen/Statistiken."
     }
   }
 }

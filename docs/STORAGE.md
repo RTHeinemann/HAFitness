@@ -61,3 +61,21 @@ Aggregation behavior:
 
 - `user_id=None` in personal/global queries means all users.
 - `user_ids=None` in household queries means all enabled users from `users`.
+
+## Exercise Catalog Schema (v3)
+
+Schema migration v3 adds:
+
+- `exercises` table for stable IDs + localized names (`name_en`, `name_de`)
+- `set_logs.exercise_id` for stable internal exercise attribution
+
+Backfill behavior:
+
+- Existing `set_logs.exercise` labels are mapped to known default `exercise_id` values when possible.
+- Legacy unknown/custom labels are preserved as-is with `exercise_id = NULL`.
+
+Runtime behavior:
+
+- `select.ha_fitness_active_exercise` now displays localized names from the catalog.
+- The integration internally tracks stable `exercise_id`.
+- Existing sensors remain available; per-exercise metrics are computed by ID with legacy fallback matching.

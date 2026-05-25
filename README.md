@@ -123,6 +123,7 @@ Planned model fields:
 - [`docs/WORKOUT_UX.md`](docs/WORKOUT_UX.md)
 - [`docs/SQLITE_MIGRATION.md`](docs/SQLITE_MIGRATION.md)
 - [`docs/STORAGE.md`](docs/STORAGE.md)
+- [`docs/EXERCISES.md`](docs/EXERCISES.md)
 - [`docs/HACS_PREPARATION.md`](docs/HACS_PREPARATION.md)
 - [`docs/HACS_INSTALLATION.md`](docs/HACS_INSTALLATION.md)
 - [`docs/MIGRATION_FROM_YAML_TO_INTEGRATION.md`](docs/MIGRATION_FROM_YAML_TO_INTEGRATION.md)
