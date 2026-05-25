@@ -446,7 +446,7 @@ class HAFitnessStore:
 
     def _resolve_household_user_ids(
         self, conn: sqlite3.Connection, user_ids: list[str] | None
-    ) -> list[str] | None:
+    ) -> list[str]:
         if user_ids is not None:
             return user_ids
 
