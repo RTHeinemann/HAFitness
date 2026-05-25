@@ -352,7 +352,7 @@ class HAFitnessPersonalRecentSetsSensor(_HAFitnessSensorBase):
     @property
     def extra_state_attributes(self) -> dict:
         return {
-            "user_id": self._coordinator.selected_user_id,
+            "selected_user_id": self._coordinator.selected_user_id,
             "recent_sets": self._coordinator.personal_recent_sets,
         }
 

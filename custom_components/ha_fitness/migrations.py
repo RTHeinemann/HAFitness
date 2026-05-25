@@ -125,5 +125,7 @@ def _apply_v2(conn: sqlite3.Connection) -> None:
 
 
 def _column_exists(conn: sqlite3.Connection, table: str, column: str) -> bool:
+    if table not in {"workouts", "set_logs"}:
+        raise ValueError(f"Unsupported table for schema inspection: {table}")
     rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
     return any(row["name"] == column for row in rows)
