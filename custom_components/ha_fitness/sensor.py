@@ -604,6 +604,7 @@ def _exercise_key(exercise: str) -> str:
 def _exercise_row_payload(
     coordinator: HAFitnessCoordinator, row: dict[str, Any]
 ) -> dict[str, Any]:
+    """Build normalized exercise catalog payload row with localized display name."""
     exercise_id = str(row.get("id") or "")
     return {
         "id": exercise_id,

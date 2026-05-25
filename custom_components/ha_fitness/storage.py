@@ -860,6 +860,7 @@ def _row_to_dict(row: sqlite3.Row | None) -> dict[str, Any] | None:
 
 
 def _empty_exercise_aggregate() -> dict[str, float | int]:
+    """Return zero-valued aggregate metrics for exercises without logged sets."""
     return {"total_volume": 0.0, "total_sets": 0, "pr": 0.0}
 
 

@@ -498,6 +498,7 @@ class HAFitnessOptionsFlow(config_entries.OptionsFlow):
 
 
 def _optional_str(value: Any) -> str | None:
+    """Return stripped string value or None for non-strings/empty strings."""
     if not isinstance(value, str):
         return None
     normalized = value.strip()
@@ -505,6 +506,7 @@ def _optional_str(value: Any) -> str | None:
 
 
 def _normalize_exercise_id(raw_exercise_id: str) -> str | None:
+    """Normalize raw exercise id to lowercase underscore format and validate it."""
     normalized = raw_exercise_id.strip().lower().replace("-", "_")
     if not normalized:
         return None
@@ -514,6 +516,7 @@ def _normalize_exercise_id(raw_exercise_id: str) -> str | None:
 
 
 def _coerce_int(value: Any, fallback: int) -> int:
+    """Convert a value to int, returning fallback for unsupported/invalid values."""
     if isinstance(value, bool):
         return fallback
     try:
@@ -523,6 +526,7 @@ def _coerce_int(value: Any, fallback: int) -> int:
 
 
 def _is_valid_sort_order_input(value: Any) -> bool:
+    """Validate that sort order input represents a whole number (not bool)."""
     if isinstance(value, bool):
         return False
     if isinstance(value, int):
