@@ -82,7 +82,7 @@ class HAFitnessConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         try:
             existing = self._async_current_entries()
             if existing:
-                return await self.async_step_add_equipment(user_input)
+                return await self.async_step_add_equipment(None)
         except Exception:
             _LOGGER.exception("HA Fitness config flow user step failed")
             return self.async_abort(reason="unknown")
@@ -139,12 +139,17 @@ class HAFitnessConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     errors[ATTR_EQUIPMENT_ID] = "invalid_equipment_id"
                 elif coordinator is not None and coordinator.get_equipment(equipment_id):
                     errors[ATTR_EQUIPMENT_ID] = "equipment_exists"
+                elif equipment_id and coordinator is None:
+                    store_check = HAFitnessStore(self.hass)
+                    await store_check.async_initialize()
+                    if await store_check.async_get_equipment(equipment_id) is not None:
+                        errors[ATTR_EQUIPMENT_ID] = "equipment_exists"
                 if not name:
                     errors["name"] = "name_required"
                 if not _is_valid_sort_order_input(sort_order_raw):
                     errors[ATTR_SORT_ORDER] = "invalid_sort_order"
 
-                if not errors and equipment_id is not None:
+                if not errors:
                     if coordinator is not None:
                         await coordinator.async_add_equipment(
                             equipment_id=equipment_id,
