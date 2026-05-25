@@ -465,6 +465,8 @@ class HAFitnessStore:
                 """,
                 (exercise_id,),
             ).fetchone()
+            if row is None:
+                return None
             return _row_to_dict(row)
 
     def _add_exercise(
@@ -692,7 +694,7 @@ class HAFitnessStore:
             )
             exercise_rows = conn.execute(sql, params).fetchall()
             exercise_map: dict[str, dict[str, Any]] = {
-                str(row["id"]): _row_to_dict(row) or {}
+                str(row["id"]): dict(row)
                 for row in exercise_rows
                 if row is not None and row["id"] is not None
             }
