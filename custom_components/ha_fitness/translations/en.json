@@ -254,6 +254,24 @@
       "exercise_statistics": {
         "name": "Exercise Statistics"
       },
+      "exercise_pr": {
+        "name": "PR"
+      },
+      "exercise_total_volume": {
+        "name": "Total Volume"
+      },
+      "exercise_personal_pr": {
+        "name": "Personal PR"
+      },
+      "exercise_personal_total_volume": {
+        "name": "Personal Total Volume"
+      },
+      "exercise_household_pr": {
+        "name": "Household PR"
+      },
+      "exercise_household_total_volume": {
+        "name": "Household Total Volume"
+      },
       "pr_bench_press": {
         "name": "PR Bench Press"
       },

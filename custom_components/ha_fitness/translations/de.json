@@ -254,6 +254,24 @@
       "exercise_statistics": {
         "name": "Übungsstatistiken"
       },
+      "exercise_pr": {
+        "name": "PR"
+      },
+      "exercise_total_volume": {
+        "name": "Gesamtvolumen"
+      },
+      "exercise_personal_pr": {
+        "name": "Persönlicher PR"
+      },
+      "exercise_personal_total_volume": {
+        "name": "Persönliches Gesamtvolumen"
+      },
+      "exercise_household_pr": {
+        "name": "Haushalts-PR"
+      },
+      "exercise_household_total_volume": {
+        "name": "Haushalts-Gesamtvolumen"
+      },
       "pr_bench_press": {
         "name": "PR Bankdrücken"
       },

@@ -664,8 +664,9 @@ class HAFitnessEquipmentTotalSetsSensor(_HAFitnessEquipmentSensorBase):
         return self._coordinator.get_equipment_total_sets(self._equipment_id)
 
 
-class _ExerciseMetricSensor(_HAFitnessSensorBase):
+class _ExerciseMetricSensor(SensorEntity):
     _attr_native_unit_of_measurement = UnitOfMass.KILOGRAMS
+    _attr_has_entity_name = True
 
     def __init__(
         self,
@@ -673,16 +674,34 @@ class _ExerciseMetricSensor(_HAFitnessSensorBase):
         entry: ConfigEntry,
         exercise: str,
         *,
-        translation_prefix: str,
+        translation_key: str,
         unique_prefix: str,
         value_getter: Callable[[str], float],
     ) -> None:
-        super().__init__(coordinator, entry)
         exercise_key = _exercise_key(exercise)
+        self._coordinator = coordinator
         self._exercise = exercise
         self._value_getter = value_getter
-        self._attr_translation_key = f"{translation_prefix}_{exercise_key}"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, entry.entry_id, "exercise", exercise_key)},
+            name=coordinator.exercise_display_name(exercise),
+            manufacturer="HAGym",
+            model="HAGym Exercise",
+            via_device=(DOMAIN, entry.entry_id),
+            entry_type="service",
+        )
+        self._attr_translation_key = translation_key
         self._attr_unique_id = f"{entry.entry_id}_{unique_prefix}_{exercise_key}"
+
+    async def async_added_to_hass(self) -> None:
+        """Subscribe to coordinator updates."""
+        self.async_on_remove(
+            self._coordinator.async_add_listener(self._handle_coordinator_update)
+        )
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        self.async_write_ha_state()
 
     @property
     def native_value(self) -> float:
@@ -697,7 +716,7 @@ class HAFitnessPRByExerciseSensor(_ExerciseMetricSensor):
             coordinator,
             entry,
             exercise,
-            translation_prefix="pr",
+            translation_key="exercise_pr",
             unique_prefix="pr",
             value_getter=coordinator.get_pr_by_exercise,
         )
@@ -713,11 +732,10 @@ class HAFitnessVolumeByExerciseSensor(_ExerciseMetricSensor):
             coordinator,
             entry,
             exercise,
-            translation_prefix="volume",
+            translation_key="exercise_total_volume",
             unique_prefix="volume",
             value_getter=coordinator.get_volume_by_exercise,
         )
-        self._attr_translation_key = f"volume_{_exercise_key(exercise)}_total"
         self._attr_unique_id = f"{entry.entry_id}_volume_{_exercise_key(exercise)}_total"
 
 
@@ -729,7 +747,7 @@ class HAFitnessPersonalPRByExerciseSensor(_ExerciseMetricSensor):
             coordinator,
             entry,
             exercise,
-            translation_prefix="personal_pr",
+            translation_key="exercise_personal_pr",
             unique_prefix="personal_pr",
             value_getter=coordinator.get_personal_pr_by_exercise,
         )
@@ -745,11 +763,10 @@ class HAFitnessPersonalVolumeByExerciseSensor(_ExerciseMetricSensor):
             coordinator,
             entry,
             exercise,
-            translation_prefix="personal_volume",
+            translation_key="exercise_personal_total_volume",
             unique_prefix="personal_volume",
             value_getter=coordinator.get_personal_volume_by_exercise,
         )
-        self._attr_translation_key = f"personal_volume_{_exercise_key(exercise)}_total"
         self._attr_unique_id = f"{entry.entry_id}_personal_volume_{_exercise_key(exercise)}_total"
 
 
@@ -761,7 +778,7 @@ class HAFitnessHouseholdPRByExerciseSensor(_ExerciseMetricSensor):
             coordinator,
             entry,
             exercise,
-            translation_prefix="household_pr",
+            translation_key="exercise_household_pr",
             unique_prefix="household_pr",
             value_getter=coordinator.get_household_pr_by_exercise,
         )
@@ -777,11 +794,10 @@ class HAFitnessHouseholdVolumeByExerciseSensor(_ExerciseMetricSensor):
             coordinator,
             entry,
             exercise,
-            translation_prefix="household_volume",
+            translation_key="exercise_household_total_volume",
             unique_prefix="household_volume",
             value_getter=coordinator.get_household_volume_by_exercise,
         )
-        self._attr_translation_key = f"household_volume_{_exercise_key(exercise)}_total"
         self._attr_unique_id = f"{entry.entry_id}_household_volume_{_exercise_key(exercise)}_total"
 
 

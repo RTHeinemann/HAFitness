@@ -96,6 +96,8 @@ The integration exposes two generic sensors to make dynamic/custom exercises vis
 
 Custom exercises appear here as soon as sets are logged for them.
 Existing fixed per-exercise PR/volume sensors still only exist for the default built-in exercise IDs.
+Those fixed per-exercise sensors are grouped under one Home Assistant device per exercise
+(`HAGym Exercise`) instead of the central `HAGym Tracker` device.
 
 ## Backward Compatibility
 

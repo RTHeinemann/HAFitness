@@ -52,10 +52,12 @@ from .storage import HAFitnessStore
 _LOGGER = logging.getLogger(__name__)
 
 PLATFORMS = ["sensor", "button", "select", "number", "text"]
+LEGACY_DISPLAY_NAMES = {"HAFitness", "HAFintess", "HA Fitness", "HA Fitness Tracker"}
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up HAGym from a config entry."""
+    _update_legacy_entry_branding(hass, entry)
     display_name: str = entry.data.get(CONF_DISPLAY_NAME, DEFAULT_DISPLAY_NAME)
     included_user_ids: list[str] | None = entry.options.get(CONF_INCLUDED_USER_IDS)
 
@@ -73,6 +75,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     _reassign_equipment_entities_to_equipment_devices(hass, entry, coordinator)
+    _reassign_exercise_entities_to_exercise_devices(hass, entry, coordinator)
 
     _register_services(hass)
 
@@ -386,6 +389,25 @@ def _optional_str(value: object) -> str | None:
     return normalized if normalized else None
 
 
+def _update_legacy_entry_branding(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Rename old default config entry/display names to HAGym."""
+    data = dict(entry.data)
+    needs_update = False
+
+    display_name = data.get(CONF_DISPLAY_NAME)
+    if display_name in LEGACY_DISPLAY_NAMES:
+        data[CONF_DISPLAY_NAME] = DEFAULT_DISPLAY_NAME
+        needs_update = True
+
+    title = DEFAULT_DISPLAY_NAME if entry.title in LEGACY_DISPLAY_NAMES else None
+    if title is not None and needs_update:
+        hass.config_entries.async_update_entry(entry, title=title, data=data)
+    elif title is not None:
+        hass.config_entries.async_update_entry(entry, title=title)
+    elif needs_update:
+        hass.config_entries.async_update_entry(entry, data=data)
+
+
 def _reassign_equipment_entities_to_equipment_devices(
     hass: HomeAssistant, entry: ConfigEntry, coordinator: HAFitnessCoordinator
 ) -> None:
@@ -447,6 +469,74 @@ def _reassign_equipment_entities_to_equipment_devices(
             continue
 
         target_device_id = device_id_by_equipment[matched_equipment_id]
+        if entity_entry.device_id == target_device_id:
+            continue
+
+        entity_registry.async_update_entity(
+            entity_entry.entity_id,
+            device_id=target_device_id,
+        )
+
+
+def _reassign_exercise_entities_to_exercise_devices(
+    hass: HomeAssistant, entry: ConfigEntry, coordinator: HAFitnessCoordinator
+) -> None:
+    """Move legacy exercise-scoped entities from the tracker to exercise devices."""
+    entity_registry = er.async_get(hass)
+    device_registry = dr.async_get(hass)
+
+    exercise_ids = [
+        exercise_id
+        for row in coordinator.exercises
+        if isinstance((exercise_id := row.get("id")), str) and exercise_id.strip()
+    ]
+    if not exercise_ids:
+        return
+
+    device_id_by_exercise: dict[str, str] = {}
+    for exercise_id in exercise_ids:
+        exercise_key = exercise_id.lower().replace(" ", "_").replace("-", "_")
+        device_entry = device_registry.async_get_device(
+            identifiers={(DOMAIN, entry.entry_id, "exercise", exercise_key)}
+        )
+        if device_entry is not None:
+            device_id_by_exercise[exercise_key] = device_entry.id
+
+    if not device_id_by_exercise:
+        return
+
+    entry_prefix = f"{entry.entry_id}_"
+    exercise_entity_prefixes = (
+        "pr",
+        "volume",
+        "personal_pr",
+        "personal_volume",
+        "household_pr",
+        "household_volume",
+    )
+
+    for entity_entry in er.async_entries_for_config_entry(entity_registry, entry.entry_id):
+        unique_id = entity_entry.unique_id
+        if not unique_id or not unique_id.startswith(entry_prefix):
+            continue
+
+        unique_suffix = unique_id[len(entry_prefix) :]
+        matched_exercise_key = None
+        for sensor_prefix in exercise_entity_prefixes:
+            prefix_marker = f"{sensor_prefix}_"
+            if not unique_suffix.startswith(prefix_marker):
+                continue
+            exercise_key = unique_suffix[len(prefix_marker) :]
+            if exercise_key.endswith("_total"):
+                exercise_key = exercise_key[: -len("_total")]
+            if exercise_key in device_id_by_exercise:
+                matched_exercise_key = exercise_key
+                break
+
+        if matched_exercise_key is None:
+            continue
+
+        target_device_id = device_id_by_exercise[matched_exercise_key]
         if entity_entry.device_id == target_device_id:
             continue
 
