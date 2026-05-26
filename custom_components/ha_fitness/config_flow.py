@@ -1,6 +1,7 @@
 """Config flow for HAGym."""
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import logging
 import re
 from typing import Any
@@ -28,10 +29,13 @@ from .const import (
     ATTR_LOCATION,
     ATTR_MUSCLE_GROUP,
     ATTR_MUSCLE_GROUP_ID,
+    ATTR_NOTES,
     ATTR_NAME_DE,
     ATTR_NAME_EN,
     ATTR_BODY_REGION,
+    ATTR_REPS,
     ATTR_SORT_ORDER,
+    ATTR_WEIGHT,
     CONF_DISPLAY_NAME,
     CONF_INCLUDED_USER_IDS,
     DEFAULT_DISPLAY_NAME,
@@ -431,6 +435,8 @@ class HAFitnessOptionsFlow(config_entries.OptionsFlow):
         self._selected_exercise_id: str | None = None
         self._selected_equipment_id: str | None = None
         self._selected_muscle_group_id: str | None = None
+        self._selected_workout_id: int | None = None
+        self._selected_set_id: int | None = None
         self._assign_muscle_exercise_id: str | None = None
         self._assign_primary_muscle_group_ids: list[str] = []
         self._assign_secondary_muscle_group_ids: list[str] = []
@@ -450,6 +456,7 @@ class HAFitnessOptionsFlow(config_entries.OptionsFlow):
                     "manage_exercises",
                     "manage_equipment",
                     "manage_muscle_groups",
+                    "manage_workouts",
                     "add_exercise",
                     "edit_exercise_select",
                     "toggle_exercise_select",
@@ -480,6 +487,7 @@ class HAFitnessOptionsFlow(config_entries.OptionsFlow):
                 "assign_exercises_select_equipment",
                 "manage_equipment",
                 "manage_muscle_groups",
+                "manage_workouts",
                 "init",
             ],
         )
@@ -497,6 +505,7 @@ class HAFitnessOptionsFlow(config_entries.OptionsFlow):
                 "assign_exercises_select_equipment",
                 "manage_exercises",
                 "manage_muscle_groups",
+                "manage_workouts",
                 "init",
             ],
         )
@@ -514,8 +523,732 @@ class HAFitnessOptionsFlow(config_entries.OptionsFlow):
                 "assign_muscle_groups_select_exercise",
                 "manage_exercises",
                 "manage_equipment",
+                "manage_workouts",
                 "init",
             ],
+        )
+
+    async def async_step_manage_workouts(
+        self, user_input: dict | None = None
+    ) -> FlowResult:
+        """Show workout management submenu."""
+        return self.async_show_menu(
+            step_id="manage_workouts",
+            menu_options=[
+                "view_workout_select",
+                "create_workout",
+                "edit_workout_select",
+                "add_set_to_workout",
+                "edit_set_select_workout",
+                "delete_set_select_workout",
+                "delete_workout_select",
+                "init",
+            ],
+        )
+
+    async def async_step_view_workout_select(
+        self, user_input: dict | None = None
+    ) -> FlowResult:
+        coordinator = self._coordinator
+        if coordinator is None:
+            return self.async_abort(reason="coordinator_unavailable")
+
+        await coordinator.async_refresh_workout_history(notify=False)
+        workouts = coordinator.get_recent_workouts()
+        options = [
+            {
+                "value": str(row.get("workout_id")),
+                "label": f"#{row.get('workout_id')} {row.get('started_at')}",
+            }
+            for row in workouts
+            if row.get("workout_id") is not None
+        ]
+        if not options:
+            return self.async_abort(reason="workout_history_empty")
+
+        if user_input is not None:
+            raw_workout_id = str(user_input.get("workout_id") or "").strip()
+            if not raw_workout_id.isdigit():
+                return self.async_show_form(
+                    step_id="view_workout_select",
+                    data_schema=vol.Schema(
+                        {
+                            vol.Required("workout_id"): SelectSelector(
+                                SelectSelectorConfig(
+                                    options=options,
+                                    multiple=False,
+                                    custom_value=False,
+                                    mode="dropdown",
+                                )
+                            )
+                        }
+                    ),
+                    errors={"workout_id": "workout_not_found"},
+                )
+            self._selected_workout_id = int(raw_workout_id)
+            return await self.async_step_view_workout_details()
+
+        return self.async_show_form(
+            step_id="view_workout_select",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("workout_id"): SelectSelector(
+                        SelectSelectorConfig(
+                            options=options,
+                            multiple=False,
+                            custom_value=False,
+                            mode="dropdown",
+                        )
+                    )
+                }
+            ),
+        )
+
+    async def async_step_view_workout_details(
+        self, user_input: dict | None = None
+    ) -> FlowResult:
+        coordinator = self._coordinator
+        if coordinator is None:
+            return self.async_abort(reason="coordinator_unavailable")
+        if self._selected_workout_id is None:
+            return await self.async_step_view_workout_select()
+        await coordinator.async_refresh_workout_history(notify=False)
+        workout = next(
+            (
+                row
+                for row in coordinator.get_recent_workouts()
+                if int(row.get("workout_id", -1)) == self._selected_workout_id
+            ),
+            None,
+        )
+        if workout is None:
+            return self.async_abort(reason="workout_not_found")
+        if user_input is not None:
+            return await self.async_step_manage_workouts()
+        set_lines = []
+        for set_row in list(workout.get("sets", []))[:10]:
+            set_lines.append(
+                f"- #{set_row.get('set_id')} {set_row.get('exercise_name')} {set_row.get('weight')}x{set_row.get('reps')}"
+            )
+        sets_block = "\\n".join(set_lines) if set_lines else "- no sets"
+        details = (
+            f"Workout #{workout.get('workout_id')}\\n"
+            f"Start: {workout.get('started_at')}\\n"
+            f"End: {workout.get('ended_at')}\\n"
+            f"Status: {workout.get('status')}\\n"
+            f"Sets: {workout.get('total_sets')}\\n"
+            f"Volume: {round(float(workout.get('total_volume', 0.0)), 2)} kg\\n"
+            f"Set preview:\\n{sets_block}"
+        )
+        return self.async_show_form(
+            step_id="view_workout_details",
+            data_schema=vol.Schema({}),
+            description_placeholders={"details": details},
+        )
+
+    async def async_step_create_workout(
+        self, user_input: dict | None = None
+    ) -> FlowResult:
+        errors: dict[str, str] = {}
+        coordinator = self._coordinator
+        if coordinator is None:
+            return self.async_abort(reason="coordinator_unavailable")
+
+        if user_input is not None:
+            try:
+                started_at = _parse_datetime_input(str(user_input.get("started_at", "")))
+                ended_raw = _optional_str(user_input.get("ended_at"))
+                ended_at = _parse_datetime_input(ended_raw) if ended_raw else None
+                notes = _optional_str(user_input.get(ATTR_NOTES))
+                status = _optional_str(user_input.get("status"))
+                await coordinator.async_create_manual_workout(
+                    started_at=started_at,
+                    ended_at=ended_at,
+                    notes=notes,
+                    status=status,
+                )
+                return await self.async_step_manage_workouts()
+            except HomeAssistantError:
+                errors["base"] = "options_flow_error"
+            except Exception:
+                _LOGGER.exception("HAGym options flow create_workout failed")
+                errors["base"] = "options_flow_error"
+
+        return self.async_show_form(
+            step_id="create_workout",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        "started_at",
+                        default=str(user_input.get("started_at", "")) if user_input else "",
+                    ): str,
+                    vol.Optional(
+                        "ended_at",
+                        default=str(user_input.get("ended_at", "")) if user_input else "",
+                    ): str,
+                    vol.Optional(
+                        ATTR_NOTES,
+                        default=str(user_input.get(ATTR_NOTES, "")) if user_input else "",
+                    ): str,
+                    vol.Optional(
+                        "status",
+                        default=str(user_input.get("status", "completed"))
+                        if user_input
+                        else "completed",
+                    ): SelectSelector(
+                        SelectSelectorConfig(
+                            options=_selector_options(["active", "completed", "cancelled"]),
+                            multiple=False,
+                            custom_value=False,
+                            mode="dropdown",
+                        )
+                    ),
+                }
+            ),
+            errors=errors,
+        )
+
+    async def async_step_edit_workout_select(
+        self, user_input: dict | None = None
+    ) -> FlowResult:
+        coordinator = self._coordinator
+        if coordinator is None:
+            return self.async_abort(reason="coordinator_unavailable")
+        await coordinator.async_refresh_workout_history(notify=False)
+        options = [
+            {
+                "value": str(row.get("workout_id")),
+                "label": f"#{row.get('workout_id')} {row.get('started_at')}",
+            }
+            for row in coordinator.get_recent_workouts()
+            if row.get("workout_id") is not None
+        ]
+        if not options:
+            return self.async_abort(reason="workout_history_empty")
+        if user_input is not None:
+            raw_workout_id = str(user_input.get("workout_id") or "").strip()
+            if not raw_workout_id.isdigit():
+                return self.async_abort(reason="workout_not_found")
+            self._selected_workout_id = int(raw_workout_id)
+            return await self.async_step_edit_workout()
+        return self.async_show_form(
+            step_id="edit_workout_select",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("workout_id"): SelectSelector(
+                        SelectSelectorConfig(
+                            options=options,
+                            multiple=False,
+                            custom_value=False,
+                            mode="dropdown",
+                        )
+                    )
+                }
+            ),
+        )
+
+    async def async_step_edit_workout(
+        self, user_input: dict | None = None
+    ) -> FlowResult:
+        coordinator = self._coordinator
+        if coordinator is None:
+            return self.async_abort(reason="coordinator_unavailable")
+        if self._selected_workout_id is None:
+            return await self.async_step_edit_workout_select()
+        await coordinator.async_refresh_workout_history(notify=False)
+        selected = next(
+            (
+                row
+                for row in coordinator.get_recent_workouts()
+                if int(row.get("workout_id", -1)) == self._selected_workout_id
+            ),
+            None,
+        )
+        if selected is None:
+            return self.async_abort(reason="workout_not_found")
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            try:
+                started_raw = _optional_str(user_input.get("started_at"))
+                ended_raw = _optional_str(user_input.get("ended_at"))
+                started_at = _parse_datetime_input(started_raw) if started_raw else None
+                ended_at = _parse_datetime_input(ended_raw) if ended_raw else None
+                notes = _optional_str(user_input.get(ATTR_NOTES))
+                status = _optional_str(user_input.get("status"))
+                await coordinator.async_update_existing_workout(
+                    workout_id=self._selected_workout_id,
+                    started_at=started_at,
+                    ended_at=ended_at,
+                    notes=notes,
+                    status=status,
+                )
+                return await self.async_step_manage_workouts()
+            except HomeAssistantError:
+                errors["base"] = "options_flow_error"
+            except Exception:
+                _LOGGER.exception("HAGym options flow edit_workout failed")
+                errors["base"] = "options_flow_error"
+        return self.async_show_form(
+            step_id="edit_workout",
+            data_schema=vol.Schema(
+                {
+                    vol.Optional("started_at", default=str(selected.get("started_at") or "")): str,
+                    vol.Optional("ended_at", default=str(selected.get("ended_at") or "")): str,
+                    vol.Optional(ATTR_NOTES, default=str(selected.get("notes") or "")): str,
+                    vol.Optional(
+                        "status",
+                        default=str(selected.get("status") or "completed"),
+                    ): SelectSelector(
+                        SelectSelectorConfig(
+                            options=_selector_options(["active", "completed", "cancelled"]),
+                            multiple=False,
+                            custom_value=False,
+                            mode="dropdown",
+                        )
+                    ),
+                }
+            ),
+            errors=errors,
+        )
+
+    async def async_step_add_set_to_workout(
+        self, user_input: dict | None = None
+    ) -> FlowResult:
+        coordinator = self._coordinator
+        if coordinator is None:
+            return self.async_abort(reason="coordinator_unavailable")
+        await coordinator.async_refresh_workout_history(notify=False)
+        workout_options = [
+            {
+                "value": str(row.get("workout_id")),
+                "label": f"#{row.get('workout_id')} {row.get('started_at')}",
+            }
+            for row in coordinator.get_recent_workouts()
+            if row.get("workout_id") is not None
+        ]
+        if not workout_options:
+            return self.async_abort(reason="workout_history_empty")
+        exercise_options = _selector_options_from_rows(
+            coordinator.exercise_options_for_options_flow(include_disabled=False)
+        )
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            try:
+                workout_id = int(str(user_input.get("workout_id")))
+                exercise_id = str(user_input.get(ATTR_EXERCISE_ID) or "").strip().lower()
+                equipment_id = _optional_str(user_input.get(ATTR_EQUIPMENT_ID))
+                weight = float(user_input.get(ATTR_WEIGHT, 0))
+                reps = int(user_input.get(ATTR_REPS, 0))
+                notes = _optional_str(user_input.get(ATTR_NOTES))
+                created_raw = _optional_str(user_input.get("created_at"))
+                created_at = _parse_datetime_input(created_raw) if created_raw else None
+                await coordinator.async_add_set_to_existing_workout(
+                    workout_id=workout_id,
+                    exercise_id=exercise_id,
+                    weight=weight,
+                    reps=reps,
+                    equipment_id=equipment_id,
+                    notes=notes,
+                    created_at=created_at,
+                )
+                return await self.async_step_manage_workouts()
+            except Exception:
+                _LOGGER.exception("HAGym options flow add_set_to_workout failed")
+                errors["base"] = "options_flow_error"
+        return self.async_show_form(
+            step_id="add_set_to_workout",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("workout_id"): SelectSelector(
+                        SelectSelectorConfig(
+                            options=workout_options,
+                            multiple=False,
+                            custom_value=False,
+                            mode="dropdown",
+                        )
+                    ),
+                    vol.Required(ATTR_EXERCISE_ID): SelectSelector(
+                        SelectSelectorConfig(
+                            options=exercise_options,
+                            multiple=False,
+                            custom_value=False,
+                            mode="dropdown",
+                        )
+                    ),
+                    vol.Optional(
+                        ATTR_EQUIPMENT_ID,
+                        default=str(user_input.get(ATTR_EQUIPMENT_ID, ""))
+                        if user_input
+                        else "",
+                    ): str,
+                    vol.Required(ATTR_WEIGHT, default=0): NumberSelector(
+                        NumberSelectorConfig(min=0, max=1000, step=0.5, mode="box")
+                    ),
+                    vol.Required(ATTR_REPS, default=10): NumberSelector(
+                        NumberSelectorConfig(min=1, max=999, step=1, mode="box")
+                    ),
+                    vol.Optional(ATTR_NOTES, default=""): str,
+                    vol.Optional("created_at", default=""): str,
+                }
+            ),
+            errors=errors,
+        )
+
+    async def async_step_edit_set_select_workout(
+        self, user_input: dict | None = None
+    ) -> FlowResult:
+        coordinator = self._coordinator
+        if coordinator is None:
+            return self.async_abort(reason="coordinator_unavailable")
+        await coordinator.async_refresh_workout_history(notify=False)
+        options = [
+            {
+                "value": str(row.get("workout_id")),
+                "label": f"#{row.get('workout_id')} {row.get('started_at')}",
+            }
+            for row in coordinator.get_recent_workouts()
+            if row.get("workout_id") is not None
+        ]
+        if not options:
+            return self.async_abort(reason="workout_history_empty")
+        if user_input is not None:
+            raw_workout_id = str(user_input.get("workout_id") or "").strip()
+            if not raw_workout_id.isdigit():
+                return self.async_abort(reason="workout_not_found")
+            self._selected_workout_id = int(raw_workout_id)
+            return await self.async_step_edit_set_select_set()
+        return self.async_show_form(
+            step_id="edit_set_select_workout",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("workout_id"): SelectSelector(
+                        SelectSelectorConfig(
+                            options=options,
+                            multiple=False,
+                            custom_value=False,
+                            mode="dropdown",
+                        )
+                    )
+                }
+            ),
+        )
+
+    async def async_step_edit_set_select_set(
+        self, user_input: dict | None = None
+    ) -> FlowResult:
+        coordinator = self._coordinator
+        if coordinator is None:
+            return self.async_abort(reason="coordinator_unavailable")
+        if self._selected_workout_id is None:
+            return await self.async_step_edit_set_select_workout()
+        await coordinator.async_refresh_workout_history(notify=False)
+        workout = next(
+            (
+                row
+                for row in coordinator.get_recent_workouts()
+                if int(row.get("workout_id", -1)) == self._selected_workout_id
+            ),
+            None,
+        )
+        if workout is None:
+            return self.async_abort(reason="workout_not_found")
+        set_options = [
+            {
+                "value": str(item.get("set_id")),
+                "label": f"#{item.get('set_id')} {item.get('exercise_name')} {item.get('weight')}x{item.get('reps')}",
+            }
+            for item in workout.get("sets", [])
+            if item.get("set_id") is not None
+        ]
+        if not set_options:
+            return self.async_abort(reason="set_not_found")
+        if user_input is not None:
+            raw_set_id = str(user_input.get("set_id") or "").strip()
+            if not raw_set_id.isdigit():
+                return self.async_abort(reason="set_not_found")
+            self._selected_set_id = int(raw_set_id)
+            return await self.async_step_edit_set()
+        return self.async_show_form(
+            step_id="edit_set_select_set",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("set_id"): SelectSelector(
+                        SelectSelectorConfig(
+                            options=set_options,
+                            multiple=False,
+                            custom_value=False,
+                            mode="dropdown",
+                        )
+                    )
+                }
+            ),
+        )
+
+    async def async_step_edit_set(self, user_input: dict | None = None) -> FlowResult:
+        coordinator = self._coordinator
+        if coordinator is None:
+            return self.async_abort(reason="coordinator_unavailable")
+        if self._selected_workout_id is None or self._selected_set_id is None:
+            return await self.async_step_edit_set_select_workout()
+        await coordinator.async_refresh_workout_history(notify=False)
+        workout = next(
+            (
+                row
+                for row in coordinator.get_recent_workouts()
+                if int(row.get("workout_id", -1)) == self._selected_workout_id
+            ),
+            None,
+        )
+        if workout is None:
+            return self.async_abort(reason="workout_not_found")
+        selected_set = next(
+            (
+                item
+                for item in workout.get("sets", [])
+                if int(item.get("set_id", -1)) == self._selected_set_id
+            ),
+            None,
+        )
+        if selected_set is None:
+            return self.async_abort(reason="set_not_found")
+        exercise_options = _selector_options_from_rows(
+            coordinator.exercise_options_for_options_flow(include_disabled=True)
+        )
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            try:
+                equipment_id = _optional_str(user_input.get(ATTR_EQUIPMENT_ID))
+                exercise_id = str(user_input.get(ATTR_EXERCISE_ID) or "").strip().lower()
+                weight = float(user_input.get(ATTR_WEIGHT))
+                reps = int(user_input.get(ATTR_REPS))
+                notes = _optional_str(user_input.get(ATTR_NOTES))
+                created_raw = _optional_str(user_input.get("created_at"))
+                created_at = _parse_datetime_input(created_raw) if created_raw else None
+                await coordinator.async_update_existing_set(
+                    set_id=self._selected_set_id,
+                    equipment_id=equipment_id,
+                    exercise_id=exercise_id,
+                    weight=weight,
+                    reps=reps,
+                    notes=notes,
+                    created_at=created_at,
+                )
+                return await self.async_step_manage_workouts()
+            except Exception:
+                _LOGGER.exception("HAGym options flow edit_set failed")
+                errors["base"] = "options_flow_error"
+        return self.async_show_form(
+            step_id="edit_set",
+            data_schema=vol.Schema(
+                {
+                    vol.Optional(
+                        ATTR_EQUIPMENT_ID,
+                        default=str(selected_set.get("equipment_id") or ""),
+                    ): str,
+                    vol.Required(
+                        ATTR_EXERCISE_ID,
+                        default=str(selected_set.get("exercise_id") or ""),
+                    ): SelectSelector(
+                        SelectSelectorConfig(
+                            options=exercise_options,
+                            multiple=False,
+                            custom_value=False,
+                            mode="dropdown",
+                        )
+                    ),
+                    vol.Required(ATTR_WEIGHT, default=float(selected_set.get("weight", 0.0))): NumberSelector(
+                        NumberSelectorConfig(min=0, max=1000, step=0.5, mode="box")
+                    ),
+                    vol.Required(ATTR_REPS, default=int(selected_set.get("reps", 1))): NumberSelector(
+                        NumberSelectorConfig(min=1, max=999, step=1, mode="box")
+                    ),
+                    vol.Optional(ATTR_NOTES, default=str(selected_set.get("notes") or "")): str,
+                    vol.Optional("created_at", default=str(selected_set.get("created_at") or "")): str,
+                }
+            ),
+            errors=errors,
+        )
+
+    async def async_step_delete_set_select_workout(
+        self, user_input: dict | None = None
+    ) -> FlowResult:
+        coordinator = self._coordinator
+        if coordinator is None:
+            return self.async_abort(reason="coordinator_unavailable")
+        await coordinator.async_refresh_workout_history(notify=False)
+        options = [
+            {
+                "value": str(row.get("workout_id")),
+                "label": f"#{row.get('workout_id')} {row.get('started_at')}",
+            }
+            for row in coordinator.get_recent_workouts()
+            if row.get("workout_id") is not None
+        ]
+        if not options:
+            return self.async_abort(reason="workout_history_empty")
+        if user_input is not None:
+            raw_workout_id = str(user_input.get("workout_id") or "").strip()
+            if not raw_workout_id.isdigit():
+                return self.async_abort(reason="workout_not_found")
+            self._selected_workout_id = int(raw_workout_id)
+            return await self.async_step_delete_set_select_set()
+        return self.async_show_form(
+            step_id="delete_set_select_workout",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("workout_id"): SelectSelector(
+                        SelectSelectorConfig(
+                            options=options,
+                            multiple=False,
+                            custom_value=False,
+                            mode="dropdown",
+                        )
+                    )
+                }
+            ),
+        )
+
+    async def async_step_delete_set_select_set(
+        self, user_input: dict | None = None
+    ) -> FlowResult:
+        coordinator = self._coordinator
+        if coordinator is None:
+            return self.async_abort(reason="coordinator_unavailable")
+        if self._selected_workout_id is None:
+            return await self.async_step_delete_set_select_workout()
+        await coordinator.async_refresh_workout_history(notify=False)
+        workout = next(
+            (
+                row
+                for row in coordinator.get_recent_workouts()
+                if int(row.get("workout_id", -1)) == self._selected_workout_id
+            ),
+            None,
+        )
+        if workout is None:
+            return self.async_abort(reason="workout_not_found")
+        options = [
+            {
+                "value": str(item.get("set_id")),
+                "label": f"#{item.get('set_id')} {item.get('exercise_name')} {item.get('weight')}x{item.get('reps')}",
+            }
+            for item in workout.get("sets", [])
+            if item.get("set_id") is not None
+        ]
+        if not options:
+            return self.async_abort(reason="set_not_found")
+        if user_input is not None:
+            raw_set_id = str(user_input.get("set_id") or "").strip()
+            if not raw_set_id.isdigit():
+                return self.async_abort(reason="set_not_found")
+            self._selected_set_id = int(raw_set_id)
+            return await self.async_step_delete_set_confirm()
+        return self.async_show_form(
+            step_id="delete_set_select_set",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("set_id"): SelectSelector(
+                        SelectSelectorConfig(
+                            options=options,
+                            multiple=False,
+                            custom_value=False,
+                            mode="dropdown",
+                        )
+                    )
+                }
+            ),
+        )
+
+    async def async_step_delete_set_confirm(
+        self, user_input: dict | None = None
+    ) -> FlowResult:
+        coordinator = self._coordinator
+        if coordinator is None:
+            return self.async_abort(reason="coordinator_unavailable")
+        if self._selected_set_id is None:
+            return await self.async_step_delete_set_select_workout()
+        if user_input is not None:
+            if bool(user_input.get("confirm_delete", False)):
+                try:
+                    await coordinator.async_delete_existing_set(self._selected_set_id)
+                    return await self.async_step_manage_workouts()
+                except Exception:
+                    _LOGGER.exception("HAGym options flow delete_set failed")
+                    return self.async_abort(reason="options_flow_error")
+            return await self.async_step_manage_workouts()
+        return self.async_show_form(
+            step_id="delete_set_confirm",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("confirm_delete", default=False): bool,
+                }
+            ),
+        )
+
+    async def async_step_delete_workout_select(
+        self, user_input: dict | None = None
+    ) -> FlowResult:
+        coordinator = self._coordinator
+        if coordinator is None:
+            return self.async_abort(reason="coordinator_unavailable")
+        await coordinator.async_refresh_workout_history(notify=False)
+        options = [
+            {
+                "value": str(row.get("workout_id")),
+                "label": f"#{row.get('workout_id')} {row.get('started_at')}",
+            }
+            for row in coordinator.get_recent_workouts()
+            if row.get("workout_id") is not None
+        ]
+        if not options:
+            return self.async_abort(reason="workout_history_empty")
+        if user_input is not None:
+            raw_workout_id = str(user_input.get("workout_id") or "").strip()
+            if not raw_workout_id.isdigit():
+                return self.async_abort(reason="workout_not_found")
+            self._selected_workout_id = int(raw_workout_id)
+            return await self.async_step_delete_workout_confirm()
+        return self.async_show_form(
+            step_id="delete_workout_select",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("workout_id"): SelectSelector(
+                        SelectSelectorConfig(
+                            options=options,
+                            multiple=False,
+                            custom_value=False,
+                            mode="dropdown",
+                        )
+                    )
+                }
+            ),
+        )
+
+    async def async_step_delete_workout_confirm(
+        self, user_input: dict | None = None
+    ) -> FlowResult:
+        coordinator = self._coordinator
+        if coordinator is None:
+            return self.async_abort(reason="coordinator_unavailable")
+        if self._selected_workout_id is None:
+            return await self.async_step_delete_workout_select()
+        if user_input is not None:
+            try:
+                if bool(user_input.get("confirm_delete", False)):
+                    await coordinator.async_delete_existing_workout(
+                        self._selected_workout_id, delete_sets=True
+                    )
+                return await self.async_step_manage_workouts()
+            except Exception:
+                _LOGGER.exception("HAGym options flow delete_workout failed")
+                return self.async_abort(reason="options_flow_error")
+        return self.async_show_form(
+            step_id="delete_workout_confirm",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("confirm_delete", default=False): bool,
+                }
+            ),
         )
 
     async def async_step_configure_household_users(
@@ -1861,3 +2594,15 @@ def _selector_options_from_rows(rows: list[dict[str, str]] | None) -> list[dict[
         label = str(row.get("label") or value).strip() or value
         options.append({"value": value, "label": label})
     return options
+
+
+def _parse_datetime_input(raw_value: str) -> datetime:
+    normalized = str(raw_value).strip()
+    if not normalized:
+        raise ValueError("Datetime must not be empty")
+    if normalized.endswith("Z"):
+        normalized = normalized[:-1] + "+00:00"
+    parsed = datetime.fromisoformat(normalized)
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)

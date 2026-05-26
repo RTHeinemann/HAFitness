@@ -34,6 +34,12 @@ SERVICE_UPDATE_MUSCLE_GROUP = "update_muscle_group"
 SERVICE_DISABLE_MUSCLE_GROUP = "disable_muscle_group"
 SERVICE_ASSIGN_MUSCLE_GROUP_TO_EXERCISE = "assign_muscle_group_to_exercise"
 SERVICE_REFRESH_MUSCLE_GROUPS = "refresh_muscle_groups"
+SERVICE_CREATE_WORKOUT = "create_workout"
+SERVICE_UPDATE_WORKOUT = "update_workout"
+SERVICE_DELETE_WORKOUT = "delete_workout"
+SERVICE_ADD_SET_TO_WORKOUT = "add_set_to_workout"
+SERVICE_UPDATE_SET = "update_set"
+SERVICE_DELETE_SET = "delete_set"
 
 # Service field names
 ATTR_EXERCISE = "exercise"
@@ -56,6 +62,13 @@ ATTR_MUSCLE_GROUP_ID = "muscle_group_id"
 ATTR_BODY_REGION = "body_region"
 ATTR_ROLE = "role"
 ATTR_WEIGHT_FACTOR = "weight_factor"
+ATTR_WORKOUT_ID = "workout_id"
+ATTR_SET_ID = "set_id"
+ATTR_STARTED_AT = "started_at"
+ATTR_ENDED_AT = "ended_at"
+ATTR_STATUS = "status"
+ATTR_CREATED_AT = "created_at"
+ATTR_DELETE_SETS = "delete_sets"
 
 # Stable default exercise IDs (also used by existing per-exercise sensors)
 EXERCISE_IDS: list[str] = [

@@ -69,6 +69,7 @@
           "manage_exercises": "Übungen verwalten",
           "manage_equipment": "Equipment verwalten",
           "manage_muscle_groups": "Muskelgruppen verwalten",
+          "manage_workouts": "Trainings verwalten",
           "add_exercise": "Übung hinzufügen",
           "edit_exercise_select": "Übung bearbeiten",
           "toggle_exercise_select": "Übung deaktivieren / aktivieren",
@@ -92,6 +93,7 @@
           "assign_exercises_select_equipment": "Übungen zuweisen",
           "manage_equipment": "Equipment verwalten",
           "manage_muscle_groups": "Muskelgruppen verwalten",
+          "manage_workouts": "Trainings verwalten",
           "init": "Zurück zum Optionsmenü"
         }
       },
@@ -160,6 +162,7 @@
           "assign_exercises_select_equipment": "Übungen zuweisen",
           "manage_exercises": "Übungen verwalten",
           "manage_muscle_groups": "Muskelgruppen verwalten",
+          "manage_workouts": "Trainings verwalten",
           "init": "Zurück zum Optionsmenü"
         }
       },
@@ -173,7 +176,123 @@
           "assign_muscle_groups_select_exercise": "Muskelgruppen zu Übung zuweisen",
           "manage_exercises": "Übungen verwalten",
           "manage_equipment": "Equipment verwalten",
+          "manage_workouts": "Trainings verwalten",
           "init": "Zurück zum Optionsmenü"
+        }
+      },
+      "manage_workouts": {
+        "title": "Trainings verwalten",
+        "description": "Verlauf einsehen und Trainings/Sätze bearbeiten.",
+        "menu_options": {
+          "view_workout_select": "Training anzeigen",
+          "create_workout": "Training erstellen",
+          "edit_workout_select": "Training bearbeiten",
+          "add_set_to_workout": "Satz hinzufügen",
+          "edit_set_select_workout": "Satz bearbeiten",
+          "delete_set_select_workout": "Satz löschen",
+          "delete_workout_select": "Training löschen",
+          "init": "Zurück zum Optionsmenü"
+        }
+      },
+      "view_workout_select": {
+        "title": "Training auswählen",
+        "description": "Wähle ein Training aus dem Verlauf.",
+        "data": {
+          "workout_id": "Training"
+        }
+      },
+      "view_workout_details": {
+        "title": "Trainingsdetails",
+        "description": "{details}"
+      },
+      "create_workout": {
+        "title": "Training erstellen",
+        "description": "Erstelle ein Training manuell mit Start-/Endzeit.",
+        "data": {
+          "started_at": "Startzeit (ISO)",
+          "ended_at": "Endzeit (ISO)",
+          "notes": "Notizen",
+          "status": "Status"
+        }
+      },
+      "edit_workout_select": {
+        "title": "Training zum Bearbeiten auswählen",
+        "data": {
+          "workout_id": "Training"
+        }
+      },
+      "edit_workout": {
+        "title": "Training bearbeiten",
+        "data": {
+          "started_at": "Startzeit (ISO)",
+          "ended_at": "Endzeit (ISO)",
+          "notes": "Notizen",
+          "status": "Status"
+        }
+      },
+      "add_set_to_workout": {
+        "title": "Satz zum Training hinzufügen",
+        "data": {
+          "workout_id": "Training",
+          "exercise_id": "Übung",
+          "equipment_id": "Equipment",
+          "weight": "Gewicht",
+          "reps": "Wiederholungen",
+          "notes": "Notizen",
+          "created_at": "Zeitpunkt (ISO)"
+        }
+      },
+      "edit_set_select_workout": {
+        "title": "Training auswählen",
+        "data": {
+          "workout_id": "Training"
+        }
+      },
+      "edit_set_select_set": {
+        "title": "Satz auswählen",
+        "data": {
+          "set_id": "Satz"
+        }
+      },
+      "edit_set": {
+        "title": "Satz bearbeiten",
+        "data": {
+          "equipment_id": "Equipment",
+          "exercise_id": "Übung",
+          "weight": "Gewicht",
+          "reps": "Wiederholungen",
+          "notes": "Notizen",
+          "created_at": "Zeitpunkt (ISO)"
+        }
+      },
+      "delete_set_select_workout": {
+        "title": "Training auswählen",
+        "data": {
+          "workout_id": "Training"
+        }
+      },
+      "delete_set_select_set": {
+        "title": "Satz auswählen",
+        "data": {
+          "set_id": "Satz"
+        }
+      },
+      "delete_set_confirm": {
+        "title": "Satz löschen bestätigen",
+        "data": {
+          "confirm_delete": "Ausgewählten Satz löschen"
+        }
+      },
+      "delete_workout_select": {
+        "title": "Training auswählen",
+        "data": {
+          "workout_id": "Training"
+        }
+      },
+      "delete_workout_confirm": {
+        "title": "Training löschen bestätigen",
+        "data": {
+          "confirm_delete": "Training mit allen Sätzen löschen"
         }
       },
       "add_equipment": {
@@ -323,6 +442,8 @@
       "invalid_equipment_id": "Die Equipment-ID darf nur Kleinbuchstaben, Zahlen oder Unterstriche enthalten.",
       "equipment_exists": "Das Equipment existiert bereits.",
       "equipment_not_found": "Equipment nicht gefunden.",
+      "workout_not_found": "Training nicht gefunden.",
+      "set_not_found": "Satz nicht gefunden.",
       "invalid_muscle_group_id": "Die Muskelgruppen-ID darf nur Kleinbuchstaben, Zahlen oder Unterstriche enthalten.",
       "muscle_group_exists": "Die Muskelgruppe existiert bereits.",
       "muscle_group_not_found": "Muskelgruppe nicht gefunden."
@@ -332,6 +453,9 @@
       "coordinator_unavailable": "Integrationsdaten sind noch nicht bereit. Bitte erneut versuchen.",
       "equipment_not_found": "Equipment nicht gefunden.",
       "muscle_group_not_found": "Muskelgruppe nicht gefunden.",
+      "workout_not_found": "Training nicht gefunden.",
+      "set_not_found": "Satz nicht gefunden.",
+      "workout_history_empty": "Noch keine Trainings im Verlauf.",
       "exercise_catalog_empty": "Im Katalog sind noch keine Übungen verfügbar.",
       "equipment_catalog_empty": "Im Katalog ist noch kein Equipment verfügbar.",
       "muscle_group_catalog_empty": "Im Katalog sind noch keine Muskelgruppen verfügbar.",
@@ -460,6 +584,9 @@
       },
       "personal_recent_sets": {
         "name": "Persönliche letzte Sätze"
+      },
+      "personal_recent_workouts": {
+        "name": "Persönliche letzte Trainings"
       },
       "household_total_volume": {
         "name": "Haushalts-Gesamtvolumen"
@@ -741,6 +868,30 @@
     "refresh_muscle_groups": {
       "name": "Muskelgruppen aktualisieren",
       "description": "Aktualisiert Muskelgruppen-Katalog und abgeleitete Muskelgruppen-Statistiken."
+    },
+    "create_workout": {
+      "name": "Training erstellen",
+      "description": "Erstellt ein Training manuell mit Start-/Endzeit."
+    },
+    "update_workout": {
+      "name": "Training bearbeiten",
+      "description": "Aktualisiert ein vorhandenes Training per workout_id."
+    },
+    "delete_workout": {
+      "name": "Training löschen",
+      "description": "Löscht ein Training und optional alle zugehörigen Sätze."
+    },
+    "add_set_to_workout": {
+      "name": "Satz zum Training hinzufügen",
+      "description": "Fügt einem bestehenden Training einen Satz hinzu."
+    },
+    "update_set": {
+      "name": "Satz bearbeiten",
+      "description": "Aktualisiert einen Satz per set_id."
+    },
+    "delete_set": {
+      "name": "Satz löschen",
+      "description": "Löscht einen Satz per set_id."
     }
   }
 }

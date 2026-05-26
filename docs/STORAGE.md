@@ -32,7 +32,7 @@ In integration code this is resolved with:
 
 - Schema migrations are tracked in `schema_migrations`.
 - Current version is applied automatically during startup.
-- Current schema version: `5`
+- Current schema version: `6`
 
 ## Recorder and Cloud
 
@@ -139,3 +139,35 @@ Scope filters:
 - Personal analytics use resolved Home Assistant `user_id`.
 - Household analytics use configured included user IDs (or all enabled users when not configured).
 - Legacy data remains separate unless explicitly included by scope.
+
+## Workout Management Schema (v6)
+
+Schema migration v6 hardens workout/set rows for editing workflows:
+
+- `workouts`
+  - `ended_at`
+  - `status`
+  - `notes`
+  - `updated_at`
+- `set_logs`
+  - `updated_at`
+
+Compatibility behavior:
+
+- Existing `finished_at` is retained for backward compatibility.
+- `ended_at` is backfilled from `finished_at` where available.
+- `status` is backfilled to `active`/`completed` based on end state.
+- `updated_at` is backfilled from existing timestamps.
+
+Workout management APIs:
+
+- `async_get_workouts`, `async_get_workout`
+- `async_create_workout`, `async_update_workout`, `async_delete_workout`
+- `async_get_sets_for_workout`
+- `async_add_set_to_workout`, `async_update_set`, `async_delete_set`
+
+Rules:
+
+- Set volume is always recalculated as `weight * reps`.
+- Datetimes are stored as ISO strings.
+- Deleting workouts does not affect exercise/equipment/muscle-group catalogs.

@@ -82,10 +82,19 @@ This repository provides **Phase 2 (SQLite-backed native persistence)** with:
   - `sensor.ha_fitness_personal_weekly_volume_history` (last 12 weeks in attributes)
   - `sensor.ha_fitness_personal_training_balance`
   - `sensor.ha_fitness_household_weekly_summary`
+- workout management aggregate sensor:
+  - `sensor.ha_fitness_personal_recent_workouts`
 - per-muscle-group Home Assistant devices and sensors (enabled groups only)
 - per-exercise PR sensors and volume-total sensors
 - recent sets sensor for dashboard history attributes
 - improved `ha_fitness.save_set` service with implicit workout fallback
+- workout management services:
+  - `ha_fitness.create_workout`
+  - `ha_fitness.update_workout`
+  - `ha_fitness.delete_workout`
+  - `ha_fitness.add_set_to_workout`
+  - `ha_fitness.update_set`
+  - `ha_fitness.delete_set`
 - maintenance services: `ha_fitness.refresh_statistics`, `ha_fitness.export_data`
 - Persistent notification on save errors
 - Native dashboard at `dashboards/ha_fitness_native_dashboard.yaml`
@@ -159,6 +168,8 @@ Planned model fields:
 - [`docs/SQLITE_MIGRATION.md`](docs/SQLITE_MIGRATION.md)
 - [`docs/STORAGE.md`](docs/STORAGE.md)
 - [`docs/ANALYTICS.md`](docs/ANALYTICS.md)
+- [`docs/WORKOUT_MANAGEMENT.md`](docs/WORKOUT_MANAGEMENT.md)
+- [`docs/SERVICES.md`](docs/SERVICES.md)
 - [`docs/EXERCISES.md`](docs/EXERCISES.md)
 - [`docs/EQUIPMENT.md`](docs/EQUIPMENT.md)
 - [`docs/MUSCLE_GROUPS.md`](docs/MUSCLE_GROUPS.md)

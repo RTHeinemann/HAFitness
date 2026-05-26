@@ -69,6 +69,7 @@
           "manage_exercises": "Manage exercises",
           "manage_equipment": "Manage equipment",
           "manage_muscle_groups": "Manage muscle groups",
+          "manage_workouts": "Manage workouts",
           "add_exercise": "Add exercise",
           "edit_exercise_select": "Edit exercise",
           "toggle_exercise_select": "Disable / enable exercise",
@@ -92,6 +93,7 @@
           "assign_exercises_select_equipment": "Assign exercises",
           "manage_equipment": "Manage equipment",
           "manage_muscle_groups": "Manage muscle groups",
+          "manage_workouts": "Manage workouts",
           "init": "Back to options menu"
         }
       },
@@ -160,6 +162,7 @@
           "assign_exercises_select_equipment": "Assign exercises",
           "manage_exercises": "Manage exercises",
           "manage_muscle_groups": "Manage muscle groups",
+          "manage_workouts": "Manage workouts",
           "init": "Back to options menu"
         }
       },
@@ -173,7 +176,123 @@
           "assign_muscle_groups_select_exercise": "Assign muscle groups to exercise",
           "manage_exercises": "Manage exercises",
           "manage_equipment": "Manage equipment",
+          "manage_workouts": "Manage workouts",
           "init": "Back to options menu"
+        }
+      },
+      "manage_workouts": {
+        "title": "Manage workouts",
+        "description": "View and edit workout history and sets.",
+        "menu_options": {
+          "view_workout_select": "View workout",
+          "create_workout": "Create workout",
+          "edit_workout_select": "Edit workout",
+          "add_set_to_workout": "Add set",
+          "edit_set_select_workout": "Edit set",
+          "delete_set_select_workout": "Delete set",
+          "delete_workout_select": "Delete workout",
+          "init": "Back to options menu"
+        }
+      },
+      "view_workout_select": {
+        "title": "Select workout",
+        "description": "Choose a workout from recent history.",
+        "data": {
+          "workout_id": "Workout"
+        }
+      },
+      "view_workout_details": {
+        "title": "Workout details",
+        "description": "{details}"
+      },
+      "create_workout": {
+        "title": "Create workout",
+        "description": "Create a workout manually with start/end timestamps.",
+        "data": {
+          "started_at": "Started at (ISO)",
+          "ended_at": "Ended at (ISO)",
+          "notes": "Notes",
+          "status": "Status"
+        }
+      },
+      "edit_workout_select": {
+        "title": "Select workout to edit",
+        "data": {
+          "workout_id": "Workout"
+        }
+      },
+      "edit_workout": {
+        "title": "Edit workout",
+        "data": {
+          "started_at": "Started at (ISO)",
+          "ended_at": "Ended at (ISO)",
+          "notes": "Notes",
+          "status": "Status"
+        }
+      },
+      "add_set_to_workout": {
+        "title": "Add set to workout",
+        "data": {
+          "workout_id": "Workout",
+          "exercise_id": "Exercise",
+          "equipment_id": "Equipment",
+          "weight": "Weight",
+          "reps": "Reps",
+          "notes": "Notes",
+          "created_at": "Created at (ISO)"
+        }
+      },
+      "edit_set_select_workout": {
+        "title": "Select workout",
+        "data": {
+          "workout_id": "Workout"
+        }
+      },
+      "edit_set_select_set": {
+        "title": "Select set",
+        "data": {
+          "set_id": "Set"
+        }
+      },
+      "edit_set": {
+        "title": "Edit set",
+        "data": {
+          "equipment_id": "Equipment",
+          "exercise_id": "Exercise",
+          "weight": "Weight",
+          "reps": "Reps",
+          "notes": "Notes",
+          "created_at": "Created at (ISO)"
+        }
+      },
+      "delete_set_select_workout": {
+        "title": "Select workout",
+        "data": {
+          "workout_id": "Workout"
+        }
+      },
+      "delete_set_select_set": {
+        "title": "Select set",
+        "data": {
+          "set_id": "Set"
+        }
+      },
+      "delete_set_confirm": {
+        "title": "Confirm set deletion",
+        "data": {
+          "confirm_delete": "Delete selected set"
+        }
+      },
+      "delete_workout_select": {
+        "title": "Select workout",
+        "data": {
+          "workout_id": "Workout"
+        }
+      },
+      "delete_workout_confirm": {
+        "title": "Confirm workout deletion",
+        "data": {
+          "confirm_delete": "Delete workout and all sets"
         }
       },
       "add_equipment": {
@@ -323,6 +442,8 @@
       "invalid_equipment_id": "Equipment ID must contain only lowercase letters, numbers, or underscore.",
       "equipment_exists": "Equipment already exists.",
       "equipment_not_found": "Equipment not found.",
+      "workout_not_found": "Workout not found.",
+      "set_not_found": "Set not found.",
       "invalid_muscle_group_id": "Muscle group ID must contain only lowercase letters, numbers, or underscore.",
       "muscle_group_exists": "Muscle group already exists.",
       "muscle_group_not_found": "Muscle group not found."
@@ -332,6 +453,9 @@
       "coordinator_unavailable": "Integration data is not ready yet. Please try again.",
       "equipment_not_found": "Equipment not found.",
       "muscle_group_not_found": "Muscle group not found.",
+      "workout_not_found": "Workout not found.",
+      "set_not_found": "Set not found.",
+      "workout_history_empty": "No workouts found yet.",
       "exercise_catalog_empty": "No exercises available in the catalog yet.",
       "equipment_catalog_empty": "No equipment available in the catalog yet.",
       "muscle_group_catalog_empty": "No muscle groups available in the catalog yet.",
@@ -460,6 +584,9 @@
       },
       "personal_recent_sets": {
         "name": "Personal Recent Sets"
+      },
+      "personal_recent_workouts": {
+        "name": "Personal recent workouts"
       },
       "household_total_volume": {
         "name": "Household Total Volume"
@@ -741,6 +868,30 @@
     "refresh_muscle_groups": {
       "name": "Refresh Muscle Groups",
       "description": "Refreshes muscle group catalog and derived muscle group statistics."
+    },
+    "create_workout": {
+      "name": "Create Workout",
+      "description": "Creates a workout manually with start/end timestamps."
+    },
+    "update_workout": {
+      "name": "Update Workout",
+      "description": "Updates one workout by workout_id."
+    },
+    "delete_workout": {
+      "name": "Delete Workout",
+      "description": "Deletes a workout and optionally all related set rows."
+    },
+    "add_set_to_workout": {
+      "name": "Add Set to Workout",
+      "description": "Adds a set to an existing workout."
+    },
+    "update_set": {
+      "name": "Update Set",
+      "description": "Updates one set by set_id."
+    },
+    "delete_set": {
+      "name": "Delete Set",
+      "description": "Deletes one set by set_id."
     }
   }
 }

@@ -1,6 +1,7 @@
 """HAGym integration."""
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import logging
 import sqlite3
 import voluptuous as vol
@@ -34,11 +35,22 @@ from .const import (
     ATTR_WEIGHT_FACTOR,
     ATTR_BODY_REGION,
     ATTR_ICON,
+    ATTR_CREATED_AT,
+    ATTR_DELETE_SETS,
+    ATTR_ENDED_AT,
     CONF_DISPLAY_NAME,
     CONF_INCLUDED_USER_IDS,
+    ATTR_SET_ID,
+    ATTR_STATUS,
+    ATTR_STARTED_AT,
+    ATTR_WORKOUT_ID,
     SERVICE_ADD_EXERCISE,
+    SERVICE_ADD_SET_TO_WORKOUT,
     SERVICE_ADD_MUSCLE_GROUP,
     SERVICE_ASSIGN_MUSCLE_GROUP_TO_EXERCISE,
+    SERVICE_CREATE_WORKOUT,
+    SERVICE_DELETE_SET,
+    SERVICE_DELETE_WORKOUT,
     SERVICE_DISABLE_MUSCLE_GROUP,
     SERVICE_DISABLE_EXERCISE,
     DEFAULT_DISPLAY_NAME,
@@ -55,7 +67,9 @@ from .const import (
     SERVICE_SELECT_EQUIPMENT,
     SERVICE_START_WORKOUT,
     SERVICE_UPDATE_EXERCISE,
+    SERVICE_UPDATE_SET,
     SERVICE_UPDATE_MUSCLE_GROUP,
+    SERVICE_UPDATE_WORKOUT,
 )
 from .coordinator import HAFitnessCoordinator
 from .storage import HAFitnessStore
@@ -132,6 +146,12 @@ def _register_services(hass: HomeAssistant) -> None:
         SERVICE_DISABLE_MUSCLE_GROUP,
         SERVICE_ASSIGN_MUSCLE_GROUP_TO_EXERCISE,
         SERVICE_REFRESH_MUSCLE_GROUPS,
+        SERVICE_CREATE_WORKOUT,
+        SERVICE_UPDATE_WORKOUT,
+        SERVICE_DELETE_WORKOUT,
+        SERVICE_ADD_SET_TO_WORKOUT,
+        SERVICE_UPDATE_SET,
+        SERVICE_DELETE_SET,
     )
     if all(hass.services.has_service(DOMAIN, service) for service in required_services):
         return
@@ -396,6 +416,152 @@ def _register_services(hass: HomeAssistant) -> None:
             await coordinator.async_refresh_muscle_groups(notify=False)
             await coordinator.async_refresh_statistics()
 
+    async def handle_create_workout(call: ServiceCall) -> None:
+        started_at = _parse_datetime_input(call.data[ATTR_STARTED_AT], ATTR_STARTED_AT)
+        ended_at = (
+            _parse_datetime_input(call.data[ATTR_ENDED_AT], ATTR_ENDED_AT)
+            if call.data.get(ATTR_ENDED_AT)
+            else None
+        )
+        if ended_at is not None and started_at > ended_at:
+            raise HomeAssistantError("started_at must be before or equal to ended_at.")
+        status = _optional_str(call.data.get(ATTR_STATUS))
+        notes = _optional_str(call.data.get(ATTR_NOTES))
+        user_id = _optional_str(call.data.get(ATTR_USER_ID))
+        for coordinator in _all_coordinators():
+            try:
+                await coordinator.async_create_manual_workout(
+                    started_at=started_at,
+                    ended_at=ended_at,
+                    notes=notes,
+                    status=status,
+                    user_id=user_id,
+                    context_user_id=call.context.user_id,
+                )
+            except ValueError as err:
+                raise HomeAssistantError(str(err)) from err
+
+    async def handle_update_workout(call: ServiceCall) -> None:
+        workout_id = int(call.data[ATTR_WORKOUT_ID])
+        started_at = (
+            _parse_datetime_input(call.data[ATTR_STARTED_AT], ATTR_STARTED_AT)
+            if call.data.get(ATTR_STARTED_AT)
+            else None
+        )
+        ended_at = (
+            _parse_datetime_input(call.data[ATTR_ENDED_AT], ATTR_ENDED_AT)
+            if call.data.get(ATTR_ENDED_AT)
+            else None
+        )
+        if started_at is not None and ended_at is not None and started_at > ended_at:
+            raise HomeAssistantError("started_at must be before or equal to ended_at.")
+        status = _optional_str(call.data.get(ATTR_STATUS))
+        notes = _optional_str(call.data.get(ATTR_NOTES))
+        if started_at is None and ended_at is None and status is None and notes is None:
+            raise HomeAssistantError("No update fields provided for update_workout.")
+        for coordinator in _all_coordinators():
+            try:
+                await coordinator.async_update_existing_workout(
+                    workout_id=workout_id,
+                    started_at=started_at,
+                    ended_at=ended_at,
+                    notes=notes,
+                    status=status,
+                )
+            except ValueError as err:
+                raise HomeAssistantError(str(err)) from err
+
+    async def handle_delete_workout(call: ServiceCall) -> None:
+        workout_id = int(call.data[ATTR_WORKOUT_ID])
+        delete_sets = bool(call.data.get(ATTR_DELETE_SETS, True))
+        for coordinator in _all_coordinators():
+            try:
+                await coordinator.async_delete_existing_workout(
+                    workout_id=workout_id, delete_sets=delete_sets
+                )
+            except ValueError as err:
+                raise HomeAssistantError(str(err)) from err
+
+    async def handle_add_set_to_workout(call: ServiceCall) -> None:
+        workout_id = int(call.data[ATTR_WORKOUT_ID])
+        exercise_id = str(call.data[ATTR_EXERCISE_ID]).strip().lower()
+        equipment_id = _optional_str(call.data.get(ATTR_EQUIPMENT_ID))
+        weight = float(call.data[ATTR_WEIGHT])
+        reps = int(call.data[ATTR_REPS])
+        notes = _optional_str(call.data.get(ATTR_NOTES))
+        created_at = (
+            _parse_datetime_input(call.data[ATTR_CREATED_AT], ATTR_CREATED_AT)
+            if call.data.get(ATTR_CREATED_AT)
+            else None
+        )
+        user_id = _optional_str(call.data.get(ATTR_USER_ID))
+        if weight < 0:
+            raise HomeAssistantError("weight must be >= 0.")
+        if reps < 1:
+            raise HomeAssistantError("reps must be >= 1.")
+        for coordinator in _all_coordinators():
+            try:
+                await coordinator.async_add_set_to_existing_workout(
+                    workout_id=workout_id,
+                    exercise_id=exercise_id,
+                    weight=weight,
+                    reps=reps,
+                    equipment_id=equipment_id,
+                    notes=notes,
+                    created_at=created_at,
+                    user_id=user_id,
+                    context_user_id=call.context.user_id,
+                )
+            except ValueError as err:
+                raise HomeAssistantError(str(err)) from err
+
+    async def handle_update_set(call: ServiceCall) -> None:
+        set_id = int(call.data[ATTR_SET_ID])
+        equipment_id = call.data.get(ATTR_EQUIPMENT_ID)
+        if isinstance(equipment_id, str):
+            equipment_id = equipment_id.strip()
+        exercise_id = call.data.get(ATTR_EXERCISE_ID)
+        if isinstance(exercise_id, str):
+            exercise_id = exercise_id.strip().lower()
+        weight = float(call.data[ATTR_WEIGHT]) if ATTR_WEIGHT in call.data else None
+        reps = int(call.data[ATTR_REPS]) if ATTR_REPS in call.data else None
+        notes = _optional_str(call.data.get(ATTR_NOTES)) if ATTR_NOTES in call.data else None
+        created_at = (
+            _parse_datetime_input(call.data[ATTR_CREATED_AT], ATTR_CREATED_AT)
+            if call.data.get(ATTR_CREATED_AT)
+            else None
+        )
+        if (
+            equipment_id is None
+            and exercise_id is None
+            and weight is None
+            and reps is None
+            and notes is None
+            and created_at is None
+        ):
+            raise HomeAssistantError("No update fields provided for update_set.")
+        for coordinator in _all_coordinators():
+            try:
+                await coordinator.async_update_existing_set(
+                    set_id=set_id,
+                    equipment_id=equipment_id,
+                    exercise_id=exercise_id,
+                    weight=weight,
+                    reps=reps,
+                    notes=notes,
+                    created_at=created_at,
+                )
+            except ValueError as err:
+                raise HomeAssistantError(str(err)) from err
+
+    async def handle_delete_set(call: ServiceCall) -> None:
+        set_id = int(call.data[ATTR_SET_ID])
+        for coordinator in _all_coordinators():
+            try:
+                await coordinator.async_delete_existing_set(set_id)
+            except ValueError as err:
+                raise HomeAssistantError(str(err)) from err
+
     hass.services.async_register(DOMAIN, SERVICE_START_WORKOUT, handle_start_workout)
     hass.services.async_register(DOMAIN, SERVICE_FINISH_WORKOUT, handle_finish_workout)
     hass.services.async_register(
@@ -538,6 +704,84 @@ def _register_services(hass: HomeAssistant) -> None:
         SERVICE_REFRESH_MUSCLE_GROUPS,
         handle_refresh_muscle_groups,
     )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_CREATE_WORKOUT,
+        handle_create_workout,
+        schema=vol.Schema(
+            {
+                vol.Optional(ATTR_USER_ID): cv.string,
+                vol.Required(ATTR_STARTED_AT): cv.string,
+                vol.Optional(ATTR_ENDED_AT): cv.string,
+                vol.Optional(ATTR_NOTES): cv.string,
+                vol.Optional(ATTR_STATUS): cv.string,
+            }
+        ),
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_UPDATE_WORKOUT,
+        handle_update_workout,
+        schema=vol.Schema(
+            {
+                vol.Required(ATTR_WORKOUT_ID): vol.Coerce(int),
+                vol.Optional(ATTR_STARTED_AT): cv.string,
+                vol.Optional(ATTR_ENDED_AT): cv.string,
+                vol.Optional(ATTR_NOTES): cv.string,
+                vol.Optional(ATTR_STATUS): cv.string,
+            }
+        ),
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_DELETE_WORKOUT,
+        handle_delete_workout,
+        schema=vol.Schema(
+            {
+                vol.Required(ATTR_WORKOUT_ID): vol.Coerce(int),
+                vol.Optional(ATTR_DELETE_SETS): cv.boolean,
+            }
+        ),
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_ADD_SET_TO_WORKOUT,
+        handle_add_set_to_workout,
+        schema=vol.Schema(
+            {
+                vol.Required(ATTR_WORKOUT_ID): vol.Coerce(int),
+                vol.Optional(ATTR_USER_ID): cv.string,
+                vol.Optional(ATTR_EQUIPMENT_ID): cv.string,
+                vol.Required(ATTR_EXERCISE_ID): cv.string,
+                vol.Required(ATTR_WEIGHT): vol.Coerce(float),
+                vol.Required(ATTR_REPS): vol.Coerce(int),
+                vol.Optional(ATTR_NOTES): cv.string,
+                vol.Optional(ATTR_CREATED_AT): cv.string,
+            }
+        ),
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_UPDATE_SET,
+        handle_update_set,
+        schema=vol.Schema(
+            {
+                vol.Required(ATTR_SET_ID): vol.Coerce(int),
+                vol.Optional(ATTR_EQUIPMENT_ID): cv.string,
+                vol.Optional(ATTR_EXERCISE_ID): cv.string,
+                vol.Optional(ATTR_WEIGHT): vol.Coerce(float),
+                vol.Optional(ATTR_REPS): vol.Coerce(int),
+                vol.Optional(ATTR_NOTES): cv.string,
+                vol.Optional(ATTR_CREATED_AT): cv.string,
+            }
+        ),
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_DELETE_SET,
+        handle_delete_set,
+        schema=vol.Schema({vol.Required(ATTR_SET_ID): vol.Coerce(int)}),
+    )
 
 
 def _unregister_services(hass: HomeAssistant) -> None:
@@ -561,6 +805,12 @@ def _unregister_services(hass: HomeAssistant) -> None:
         SERVICE_DISABLE_MUSCLE_GROUP,
         SERVICE_ASSIGN_MUSCLE_GROUP_TO_EXERCISE,
         SERVICE_REFRESH_MUSCLE_GROUPS,
+        SERVICE_CREATE_WORKOUT,
+        SERVICE_UPDATE_WORKOUT,
+        SERVICE_DELETE_WORKOUT,
+        SERVICE_ADD_SET_TO_WORKOUT,
+        SERVICE_UPDATE_SET,
+        SERVICE_DELETE_SET,
     ):
         if hass.services.has_service(DOMAIN, service):
             hass.services.async_remove(DOMAIN, service)
@@ -571,6 +821,21 @@ def _optional_str(value: object) -> str | None:
         return None
     normalized = value.strip()
     return normalized if normalized else None
+
+
+def _parse_datetime_input(value: object, field_name: str) -> datetime:
+    if not isinstance(value, str) or not value.strip():
+        raise HomeAssistantError(f"{field_name} must be a non-empty ISO datetime string.")
+    normalized = value.strip()
+    if normalized.endswith("Z"):
+        normalized = normalized[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError as err:
+        raise HomeAssistantError(f"Invalid ISO datetime for {field_name}: {value}") from err
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 def _update_legacy_entry_branding(hass: HomeAssistant, entry: ConfigEntry) -> None:

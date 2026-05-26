@@ -14,7 +14,7 @@ from .const import (
     LEGACY_USER_NAME,
 )
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 
 def apply_migrations(conn: sqlite3.Connection) -> None:
@@ -49,6 +49,10 @@ def apply_migrations(conn: sqlite3.Connection) -> None:
 
     if current_version < 5:
         _apply_v5(conn)
+        current_version = 5
+
+    if current_version < 6:
+        _apply_v6(conn)
 
 
 def _apply_v1(conn: sqlite3.Connection) -> None:
@@ -434,4 +438,71 @@ def _apply_v5(conn: sqlite3.Connection) -> None:
     conn.execute(
         "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(?, ?)",
         (5, now),
+    )
+
+
+def _apply_v6(conn: sqlite3.Connection) -> None:
+    """Add workout/set management columns used by editable workout history."""
+    if not _column_exists(conn, "workouts", "ended_at"):
+        conn.execute("ALTER TABLE workouts ADD COLUMN ended_at TEXT")
+    if not _column_exists(conn, "workouts", "status"):
+        conn.execute("ALTER TABLE workouts ADD COLUMN status TEXT")
+    if not _column_exists(conn, "workouts", "notes"):
+        conn.execute("ALTER TABLE workouts ADD COLUMN notes TEXT")
+    if not _column_exists(conn, "workouts", "updated_at"):
+        conn.execute("ALTER TABLE workouts ADD COLUMN updated_at TEXT")
+
+    if not _column_exists(conn, "set_logs", "updated_at"):
+        conn.execute("ALTER TABLE set_logs ADD COLUMN updated_at TEXT")
+
+    now = datetime.now(timezone.utc).isoformat()
+    conn.execute(
+        """
+        UPDATE workouts
+        SET ended_at = COALESCE(ended_at, finished_at)
+        WHERE ended_at IS NULL
+          AND finished_at IS NOT NULL
+        """
+    )
+    conn.execute(
+        """
+        UPDATE workouts
+        SET status = CASE
+            WHEN COALESCE(ended_at, finished_at) IS NULL THEN 'active'
+            ELSE 'completed'
+        END
+        WHERE status IS NULL OR TRIM(status) = ''
+        """
+    )
+    conn.execute(
+        """
+        UPDATE workouts
+        SET updated_at = COALESCE(updated_at, ended_at, finished_at, started_at, created_at, ?)
+        WHERE updated_at IS NULL OR TRIM(updated_at) = ''
+        """,
+        (now,),
+    )
+    conn.execute(
+        """
+        UPDATE set_logs
+        SET updated_at = COALESCE(updated_at, created_at, ?)
+        WHERE updated_at IS NULL OR TRIM(updated_at) = ''
+        """,
+        (now,),
+    )
+
+    conn.executescript(
+        """
+        CREATE INDEX IF NOT EXISTS idx_workouts_user_id_started_at_desc
+            ON workouts(user_id, started_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_workouts_status_started_at
+            ON workouts(status, started_at);
+        CREATE INDEX IF NOT EXISTS idx_set_logs_workout_created_at
+            ON set_logs(workout_id, created_at);
+        """
+    )
+
+    conn.execute(
+        "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(?, ?)",
+        (6, now),
     )

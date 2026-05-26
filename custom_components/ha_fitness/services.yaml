@@ -373,6 +373,222 @@ refresh_muscle_groups:
   name: Refresh Muscle Groups
   description: Refreshes muscle group catalog and derived muscle group statistics.
 
+create_workout:
+  name: Create Workout
+  description: Creates a manual workout with start/end times and optional notes/status.
+  fields:
+    user_id:
+      name: User ID
+      required: false
+      selector:
+        text:
+    started_at:
+      name: Started At
+      description: ISO datetime, for example 2026-05-26T08:00:00+02:00
+      required: true
+      selector:
+        text:
+    ended_at:
+      name: Ended At
+      required: false
+      selector:
+        text:
+    notes:
+      name: Notes
+      required: false
+      selector:
+        text:
+    status:
+      name: Status
+      required: false
+      selector:
+        select:
+          options:
+            - active
+            - completed
+            - cancelled
+
+update_workout:
+  name: Update Workout
+  description: Updates an existing workout by id.
+  fields:
+    workout_id:
+      name: Workout ID
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 999999999
+          step: 1
+          mode: box
+    started_at:
+      name: Started At
+      required: false
+      selector:
+        text:
+    ended_at:
+      name: Ended At
+      required: false
+      selector:
+        text:
+    notes:
+      name: Notes
+      required: false
+      selector:
+        text:
+    status:
+      name: Status
+      required: false
+      selector:
+        select:
+          options:
+            - active
+            - completed
+            - cancelled
+
+delete_workout:
+  name: Delete Workout
+  description: Deletes a workout. By default all related sets are deleted too.
+  fields:
+    workout_id:
+      name: Workout ID
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 999999999
+          step: 1
+          mode: box
+    delete_sets:
+      name: Delete Sets
+      required: false
+      default: true
+      selector:
+        boolean:
+
+add_set_to_workout:
+  name: Add Set To Workout
+  description: Adds one set to an existing workout.
+  fields:
+    workout_id:
+      name: Workout ID
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 999999999
+          step: 1
+          mode: box
+    user_id:
+      name: User ID
+      required: false
+      selector:
+        text:
+    equipment_id:
+      name: Equipment ID
+      required: false
+      selector:
+        text:
+    exercise_id:
+      name: Exercise ID
+      required: true
+      selector:
+        text:
+    weight:
+      name: Weight
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 1000
+          step: 0.5
+          mode: box
+    reps:
+      name: Reps
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 999
+          step: 1
+          mode: box
+    notes:
+      name: Notes
+      required: false
+      selector:
+        text:
+    created_at:
+      name: Created At
+      required: false
+      selector:
+        text:
+
+update_set:
+  name: Update Set
+  description: Updates an existing set by id.
+  fields:
+    set_id:
+      name: Set ID
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 999999999
+          step: 1
+          mode: box
+    equipment_id:
+      name: Equipment ID
+      required: false
+      selector:
+        text:
+    exercise_id:
+      name: Exercise ID
+      required: false
+      selector:
+        text:
+    weight:
+      name: Weight
+      required: false
+      selector:
+        number:
+          min: 0
+          max: 1000
+          step: 0.5
+          mode: box
+    reps:
+      name: Reps
+      required: false
+      selector:
+        number:
+          min: 1
+          max: 999
+          step: 1
+          mode: box
+    notes:
+      name: Notes
+      required: false
+      selector:
+        text:
+    created_at:
+      name: Created At
+      required: false
+      selector:
+        text:
+
+delete_set:
+  name: Delete Set
+  description: Deletes a set by id.
+  fields:
+    set_id:
+      name: Set ID
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 999999999
+          step: 1
+          mode: box
+
 refresh_statistics:
   name: Refresh Statistics
   description: Refreshes cached global, personal, and household statistics from the SQLite database.

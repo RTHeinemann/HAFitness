@@ -94,6 +94,11 @@ class HAFitnessCoordinator:
         self._personal_weekly_volume_history: dict[str, Any] = {}
         self._personal_training_balance: dict[str, Any] = {}
         self._household_weekly_summary: dict[str, Any] = {}
+        self._recent_workouts: list[dict[str, Any]] = []
+        self._recent_workouts_user_id: str | None = None
+        self._recent_workouts_limit: int = 20
+        self._selected_workout: dict[str, Any] | None = None
+        self._selected_workout_sets: list[dict[str, Any]] = []
         self._locale: str = str(hass.config.language or "en")
 
         self._pr_by_exercise: dict[str, float] = {exercise_id: 0.0 for exercise_id in EXERCISE_IDS}
@@ -370,6 +375,21 @@ class HAFitnessCoordinator:
 
     def get_household_weekly_summary(self) -> dict[str, Any]:
         return self._household_weekly_summary
+
+    def get_recent_workouts(self) -> list[dict[str, Any]]:
+        return self._recent_workouts
+
+    def get_recent_workouts_user_id(self) -> str | None:
+        return self._recent_workouts_user_id
+
+    def get_recent_workouts_limit(self) -> int:
+        return self._recent_workouts_limit
+
+    def get_selected_workout(self) -> dict[str, Any] | None:
+        return self._selected_workout
+
+    def get_selected_workout_sets(self) -> list[dict[str, Any]]:
+        return self._selected_workout_sets
 
     def _exercise_name_from_row(self, row: dict[str, Any] | None) -> str | None:
         if row is None:
@@ -1203,6 +1223,273 @@ class HAFitnessCoordinator:
         if notify:
             self._notify_listeners()
 
+    async def async_refresh_workout_history(
+        self,
+        notify: bool = True,
+        *,
+        user_id: str | None = None,
+        limit: int = 20,
+        sets_limit: int = 50,
+    ) -> None:
+        """Refresh personal workout history cache for management/dashboard use."""
+        effective_user_id = user_id or self._resolve_personal_user_id()
+        workout_rows = await self._store.async_get_workouts(
+            user_id=effective_user_id, limit=limit, offset=0
+        )
+        workouts_payload: list[dict[str, Any]] = []
+        for workout_row in workout_rows:
+            workout_id = int(workout_row.get("id", 0))
+            if workout_id <= 0:
+                continue
+            set_rows = await self._store.async_get_sets_for_workout(workout_id)
+            set_rows = list(set_rows[: max(1, int(sets_limit))])
+            exercise_volume: dict[str, float] = {}
+            muscle_volume: dict[str, float] = {}
+            sets_payload: list[dict[str, Any]] = []
+            for set_row in set_rows:
+                exercise_id = str(set_row.get("exercise_id") or "")
+                equipment_id = str(set_row.get("equipment_id") or "")
+                volume = float(set_row.get("volume", 0.0))
+                if exercise_id:
+                    exercise_volume[exercise_id] = exercise_volume.get(exercise_id, 0.0) + volume
+                    for mapping in self.get_exercise_muscle_group_mapping(exercise_id):
+                        muscle_group_id = str(mapping.get("muscle_group_id") or "")
+                        if not muscle_group_id:
+                            continue
+                        weight_factor = float(mapping.get("weight_factor") or 1.0)
+                        muscle_volume[muscle_group_id] = (
+                            muscle_volume.get(muscle_group_id, 0.0) + (volume * weight_factor)
+                        )
+                exercise_name = (
+                    self.exercise_display_name(exercise_id)
+                    if exercise_id
+                    else str(set_row.get("exercise") or "")
+                )
+                equipment_name = (
+                    str(set_row.get("equipment_name") or "")
+                    or str(self.get_equipment(equipment_id).get("name") if equipment_id and self.get_equipment(equipment_id) else "")
+                    or equipment_id
+                    or None
+                )
+                sets_payload.append(
+                    {
+                        "set_id": int(set_row.get("id", 0)),
+                        "equipment_id": equipment_id or None,
+                        "equipment_name": equipment_name,
+                        "exercise_id": exercise_id or None,
+                        "exercise_name": exercise_name,
+                        "weight": float(set_row.get("weight", 0.0)),
+                        "reps": int(set_row.get("reps", 0)),
+                        "volume": volume,
+                        "notes": set_row.get("notes"),
+                        "created_at": set_row.get("created_at"),
+                    }
+                )
+
+            top_exercise_id = max(exercise_volume, key=exercise_volume.get) if exercise_volume else None
+            top_muscle_group_id = max(muscle_volume, key=muscle_volume.get) if muscle_volume else None
+            started_at = workout_row.get("started_at")
+            ended_at = workout_row.get("ended_at")
+            workouts_payload.append(
+                {
+                    "workout_id": workout_id,
+                    "user_id": workout_row.get("user_id"),
+                    "started_at": started_at,
+                    "ended_at": ended_at,
+                    "duration_minutes": _duration_minutes(started_at, ended_at),
+                    "status": workout_row.get("status"),
+                    "notes": workout_row.get("notes"),
+                    "total_volume": float(workout_row.get("total_volume", 0.0)),
+                    "total_sets": int(workout_row.get("total_sets", 0)),
+                    "exercise_count": int(workout_row.get("exercise_count", 0)),
+                    "equipment_count": int(workout_row.get("equipment_count", 0)),
+                    "top_exercise_id": top_exercise_id,
+                    "top_exercise_name": (
+                        self.exercise_display_name(top_exercise_id)
+                        if top_exercise_id
+                        else None
+                    ),
+                    "top_exercise_volume": float(
+                        exercise_volume.get(top_exercise_id, 0.0) if top_exercise_id else 0.0
+                    ),
+                    "top_muscle_group_id": top_muscle_group_id,
+                    "top_muscle_group_name": (
+                        self.muscle_group_display_name(top_muscle_group_id)
+                        if top_muscle_group_id
+                        else None
+                    ),
+                    "top_muscle_group_volume": float(
+                        muscle_volume.get(top_muscle_group_id, 0.0)
+                        if top_muscle_group_id
+                        else 0.0
+                    ),
+                    "sets": sets_payload,
+                }
+            )
+
+        self._recent_workouts = workouts_payload
+        self._recent_workouts_user_id = effective_user_id
+        self._recent_workouts_limit = max(1, int(limit))
+        self._selected_workout = workouts_payload[0] if workouts_payload else None
+        self._selected_workout_sets = (
+            list(self._selected_workout.get("sets", []))
+            if self._selected_workout is not None
+            else []
+        )
+        if notify:
+            self._notify_listeners()
+
+    async def async_create_manual_workout(
+        self,
+        *,
+        started_at: datetime,
+        ended_at: datetime | None = None,
+        notes: str | None = None,
+        status: str | None = None,
+        user_id: str | None = None,
+        context_user_id: str | None = None,
+    ) -> dict[str, Any]:
+        if ended_at is not None and started_at > ended_at:
+            raise HomeAssistantError("started_at must be before or equal to ended_at.")
+        resolved_user_id = (
+            await self.resolve_user_id(user_id)
+            if user_id is not None
+            else await self.resolve_user_id(context_user_id)
+        )
+        workout = await self._store.async_create_workout(
+            user_id=resolved_user_id,
+            started_at=started_at,
+            ended_at=ended_at,
+            notes=notes,
+            status=status or ("active" if ended_at is None else "completed"),
+        )
+        await self.async_refresh_workout_history(notify=False, user_id=resolved_user_id)
+        await self.async_refresh_statistics(notify=False)
+        self._notify_listeners()
+        return workout
+
+    async def async_update_existing_workout(
+        self,
+        workout_id: int,
+        *,
+        started_at: datetime | None = None,
+        ended_at: datetime | None = None,
+        notes: str | None = None,
+        status: str | None = None,
+    ) -> dict[str, Any]:
+        if started_at is not None and ended_at is not None and started_at > ended_at:
+            raise HomeAssistantError("started_at must be before or equal to ended_at.")
+        workout = await self._store.async_update_workout(
+            workout_id=workout_id,
+            started_at=started_at,
+            ended_at=ended_at,
+            notes=notes,
+            status=status,
+        )
+        await self.async_refresh_workout_history(notify=False)
+        await self.async_refresh_statistics(notify=False)
+        self._notify_listeners()
+        return workout
+
+    async def async_delete_existing_workout(
+        self, workout_id: int, *, delete_sets: bool = True
+    ) -> None:
+        await self._store.async_delete_workout(workout_id, delete_sets=delete_sets)
+        await self.async_refresh_workout_history(notify=False)
+        await self.async_refresh_statistics(notify=False)
+        self._notify_listeners()
+
+    async def async_add_set_to_existing_workout(
+        self,
+        *,
+        workout_id: int,
+        exercise_id: str,
+        weight: float,
+        reps: int,
+        equipment_id: str | None = None,
+        notes: str | None = None,
+        created_at: datetime | None = None,
+        user_id: str | None = None,
+        context_user_id: str | None = None,
+    ) -> dict[str, Any]:
+        if weight < 0:
+            raise HomeAssistantError("weight must be >= 0.")
+        if reps < 1:
+            raise HomeAssistantError("reps must be >= 1.")
+        exercise_row = self.get_exercise(exercise_id)
+        if exercise_row is None:
+            raise HomeAssistantError(f"Unknown exercise_id: {exercise_id}")
+        if int(exercise_row.get("enabled", 1)) != 1:
+            raise HomeAssistantError(f"Exercise is disabled: {exercise_id}")
+        if equipment_id:
+            equipment_row = self.get_equipment(equipment_id)
+            if equipment_row is None:
+                raise HomeAssistantError(f"Unknown equipment_id: {equipment_id}")
+        resolved_user_id = (
+            await self.resolve_user_id(user_id)
+            if user_id is not None
+            else await self.resolve_user_id(context_user_id)
+        )
+        set_row = await self._store.async_add_set_to_workout(
+            workout_id=workout_id,
+            user_id=resolved_user_id,
+            equipment_id=equipment_id,
+            exercise_id=exercise_id,
+            weight=weight,
+            reps=reps,
+            notes=notes,
+            created_at=created_at,
+        )
+        await self.async_refresh_workout_history(notify=False, user_id=resolved_user_id)
+        await self.async_refresh_statistics(notify=False)
+        self._notify_listeners()
+        return set_row
+
+    async def async_update_existing_set(
+        self,
+        set_id: int,
+        *,
+        equipment_id: str | None = None,
+        exercise_id: str | None = None,
+        weight: float | None = None,
+        reps: int | None = None,
+        notes: str | None = None,
+        created_at: datetime | None = None,
+    ) -> dict[str, Any]:
+        if weight is not None and weight < 0:
+            raise HomeAssistantError("weight must be >= 0.")
+        if reps is not None and reps < 1:
+            raise HomeAssistantError("reps must be >= 1.")
+        if exercise_id is not None:
+            exercise_row = self.get_exercise(exercise_id)
+            if exercise_row is None:
+                raise HomeAssistantError(f"Unknown exercise_id: {exercise_id}")
+            if int(exercise_row.get("enabled", 1)) != 1:
+                raise HomeAssistantError(f"Exercise is disabled: {exercise_id}")
+        if equipment_id is not None and equipment_id != "":
+            equipment_row = self.get_equipment(equipment_id)
+            if equipment_row is None:
+                raise HomeAssistantError(f"Unknown equipment_id: {equipment_id}")
+        set_row = await self._store.async_update_set(
+            set_id=set_id,
+            equipment_id=equipment_id,
+            exercise_id=exercise_id,
+            weight=weight,
+            reps=reps,
+            notes=notes,
+            created_at=created_at,
+        )
+        await self.async_refresh_workout_history(notify=False)
+        await self.async_refresh_statistics(notify=False)
+        self._notify_listeners()
+        return set_row
+
+    async def async_delete_existing_set(self, set_id: int) -> None:
+        await self._store.async_delete_set(set_id)
+        await self.async_refresh_workout_history(notify=False)
+        await self.async_refresh_statistics(notify=False)
+        self._notify_listeners()
+
     async def async_add_exercise(
         self,
         exercise_id: str,
@@ -1901,6 +2188,10 @@ class HAFitnessCoordinator:
                 personal_user_id=personal_user_id,
                 household_user_ids=household_user_ids,
             )
+            await self.async_refresh_workout_history(
+                notify=False,
+                user_id=personal_user_id,
+            )
         except sqlite3.Error as err:
             _LOGGER.exception("HAGym: failed to refresh statistics")
             raise HomeAssistantError("Failed to refresh statistics") from err
@@ -1935,6 +2226,7 @@ class HAFitnessCoordinator:
                 "pr_by_exercise": self._personal_pr_by_exercise,
                 "volume_by_exercise": self._personal_volume_by_exercise,
                 "recent_sets": self._personal_recent_sets,
+                "recent_workouts": self._recent_workouts,
                 "weekly_summary": self._personal_weekly_summary,
                 "weekly_exercise_statistics": self._personal_weekly_exercise_statistics,
                 "weekly_muscle_group_statistics": self._personal_weekly_muscle_group_statistics,
@@ -2472,6 +2764,31 @@ def _safe_div(numerator: float, denominator: int) -> float:
     if denominator <= 0:
         return 0.0
     return float(numerator) / float(denominator)
+
+
+def _duration_minutes(started_at: Any, ended_at: Any) -> float:
+    started = _parse_datetime_utc(started_at)
+    ended = _parse_datetime_utc(ended_at)
+    if started is None or ended is None:
+        return 0.0
+    if ended < started:
+        return 0.0
+    return round((ended - started).total_seconds() / 60.0, 2)
+
+
+def _parse_datetime_utc(value: Any) -> datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    normalized = value.strip()
+    if normalized.endswith("Z"):
+        normalized = normalized[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 def _limit_rows(rows: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]:

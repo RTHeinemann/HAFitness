@@ -37,6 +37,7 @@ async def async_setup_entry(
         HAFitnessPersonalTotalSetsSensor(coordinator, entry),
         HAFitnessPersonalTotalWorkoutsSensor(coordinator, entry),
         HAFitnessPersonalRecentSetsSensor(coordinator, entry),
+        HAFitnessPersonalRecentWorkoutsSensor(coordinator, entry),
         HAFitnessHouseholdTotalVolumeSensor(coordinator, entry),
         HAFitnessHouseholdTotalSetsSensor(coordinator, entry),
         HAFitnessHouseholdTotalWorkoutsSensor(coordinator, entry),
@@ -454,6 +455,28 @@ class HAFitnessHouseholdRecentSetsSensor(_HAFitnessSensorBase):
         return {
             "included_user_ids": self._coordinator.included_user_ids,
             "recent_sets": self._coordinator.household_recent_sets,
+        }
+
+
+class HAFitnessPersonalRecentWorkoutsSensor(_HAFitnessSensorBase):
+    """Sensor exposing recent personal workouts as one aggregate attribute payload."""
+
+    _attr_translation_key = "personal_recent_workouts"
+
+    def __init__(self, coordinator: HAFitnessCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{entry.entry_id}_personal_recent_workouts"
+
+    @property
+    def native_value(self) -> int:
+        return len(self._coordinator.get_recent_workouts())
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return {
+            "user_id": self._coordinator.get_recent_workouts_user_id(),
+            "limit": self._coordinator.get_recent_workouts_limit(),
+            "workouts": self._coordinator.get_recent_workouts(),
         }
 
 

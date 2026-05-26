@@ -104,6 +104,109 @@ class HAFitnessStore:
         """Return open workout where finished_at is NULL for one user."""
         return await self._hass.async_add_executor_job(self._get_current_open_workout, user_id)
 
+    async def async_get_workouts(
+        self, user_id: str | None = None, limit: int = 20, offset: int = 0
+    ) -> list[dict[str, Any]]:
+        """Return workout history rows sorted by started_at desc."""
+        return await self._hass.async_add_executor_job(
+            self._get_workouts,
+            user_id,
+            limit,
+            offset,
+        )
+
+    async def async_get_workout(self, workout_id: int) -> dict[str, Any] | None:
+        """Return one workout by id."""
+        return await self._hass.async_add_executor_job(self._get_workout, workout_id)
+
+    async def async_create_workout(
+        self,
+        user_id: str,
+        started_at: datetime,
+        ended_at: datetime | None = None,
+        notes: str | None = None,
+        status: str = "completed",
+    ) -> dict[str, Any]:
+        """Create one workout and return the stored row."""
+        return await self._hass.async_add_executor_job(
+            self._create_workout, user_id, started_at, ended_at, notes, status
+        )
+
+    async def async_update_workout(
+        self,
+        workout_id: int,
+        started_at: datetime | None = None,
+        ended_at: datetime | None = None,
+        notes: str | None = None,
+        status: str | None = None,
+    ) -> dict[str, Any]:
+        """Update one workout and return the updated row."""
+        return await self._hass.async_add_executor_job(
+            self._update_workout, workout_id, started_at, ended_at, notes, status
+        )
+
+    async def async_delete_workout(self, workout_id: int, delete_sets: bool = True) -> None:
+        """Delete one workout, optionally deleting related sets."""
+        await self._hass.async_add_executor_job(
+            self._delete_workout, workout_id, delete_sets
+        )
+
+    async def async_get_sets_for_workout(self, workout_id: int) -> list[dict[str, Any]]:
+        """Return sets for one workout ordered by created_at asc."""
+        return await self._hass.async_add_executor_job(
+            self._get_sets_for_workout, workout_id
+        )
+
+    async def async_add_set_to_workout(
+        self,
+        workout_id: int,
+        user_id: str,
+        equipment_id: str | None,
+        exercise_id: str,
+        weight: float,
+        reps: int,
+        notes: str | None = None,
+        created_at: datetime | None = None,
+    ) -> dict[str, Any]:
+        """Insert a set tied to one workout and return the inserted row."""
+        return await self._hass.async_add_executor_job(
+            self._add_set_to_workout,
+            workout_id,
+            user_id,
+            equipment_id,
+            exercise_id,
+            weight,
+            reps,
+            notes,
+            created_at,
+        )
+
+    async def async_update_set(
+        self,
+        set_id: int,
+        equipment_id: str | None = None,
+        exercise_id: str | None = None,
+        weight: float | None = None,
+        reps: int | None = None,
+        notes: str | None = None,
+        created_at: datetime | None = None,
+    ) -> dict[str, Any]:
+        """Update one set and return the updated row."""
+        return await self._hass.async_add_executor_job(
+            self._update_set,
+            set_id,
+            equipment_id,
+            exercise_id,
+            weight,
+            reps,
+            notes,
+            created_at,
+        )
+
+    async def async_delete_set(self, set_id: int) -> None:
+        """Delete one set row by id."""
+        await self._hass.async_add_executor_job(self._delete_set, set_id)
+
     async def async_get_total_volume(self, user_id: str | None = None) -> float:
         """Return total volume, optionally filtered by user."""
         return await self._hass.async_add_executor_job(self._get_total_volume, user_id)
@@ -566,19 +669,29 @@ class HAFitnessStore:
         with self._connect() as conn:
             cursor = conn.execute(
                 """
-                INSERT INTO workouts(user_id, started_at, finished_at, created_at)
-                VALUES(?, ?, NULL, ?)
+                INSERT INTO workouts(
+                    user_id, started_at, finished_at, ended_at, status, notes, created_at, updated_at
+                )
+                VALUES(?, ?, NULL, NULL, 'active', NULL, ?, ?)
                 """,
-                (user_id, iso_started_at, iso_started_at),
+                (user_id, iso_started_at, iso_started_at, iso_started_at),
             )
             conn.commit()
             return int(cursor.lastrowid)
 
     def _finish_workout(self, workout_id: int, finished_at: datetime) -> None:
+        ended_at = _isoformat(finished_at)
         with self._connect() as conn:
             conn.execute(
-                "UPDATE workouts SET finished_at = ? WHERE id = ?",
-                (_isoformat(finished_at), workout_id),
+                """
+                UPDATE workouts
+                SET finished_at = ?,
+                    ended_at = ?,
+                    status = 'completed',
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (ended_at, ended_at, ended_at, workout_id),
             )
             conn.commit()
 
@@ -602,9 +715,9 @@ class HAFitnessStore:
             cursor = conn.execute(
                 """
                 INSERT INTO set_logs(
-                    user_id, workout_id, exercise, exercise_id, equipment_id, weight, reps, volume, notes, created_at
+                    user_id, workout_id, exercise, exercise_id, equipment_id, weight, reps, volume, notes, created_at, updated_at
                 )
-                VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     user_id,
@@ -616,6 +729,7 @@ class HAFitnessStore:
                     reps,
                     volume,
                     notes,
+                    _isoformat(created_at),
                     _isoformat(created_at),
                 ),
             )
@@ -653,9 +767,18 @@ class HAFitnessStore:
         with self._connect() as conn:
             row = conn.execute(
                 """
-                SELECT id, user_id, started_at, finished_at, created_at
+                SELECT
+                    id,
+                    user_id,
+                    started_at,
+                    COALESCE(ended_at, finished_at) AS ended_at,
+                    finished_at,
+                    COALESCE(status, CASE WHEN COALESCE(ended_at, finished_at) IS NULL THEN 'active' ELSE 'completed' END) AS status,
+                    notes,
+                    created_at,
+                    updated_at
                 FROM workouts
-                WHERE finished_at IS NULL
+                WHERE COALESCE(ended_at, finished_at) IS NULL
                   AND user_id = ?
                 ORDER BY started_at DESC, id DESC
                 LIMIT 1
@@ -663,6 +786,395 @@ class HAFitnessStore:
                 (user_id,),
             ).fetchone()
             return _row_to_dict(row)
+
+    def _get_workouts(self, user_id: str | None, limit: int, offset: int) -> list[dict[str, Any]]:
+        query_limit = max(1, int(limit))
+        query_offset = max(0, int(offset))
+        with self._connect() as conn:
+            where_sql = ""
+            params: tuple[Any, ...] = ()
+            if user_id is not None:
+                where_sql = "WHERE w.user_id = ?"
+                params = (user_id,)
+            rows = conn.execute(
+                f"""
+                SELECT
+                    w.id,
+                    w.user_id,
+                    w.started_at,
+                    COALESCE(w.ended_at, w.finished_at) AS ended_at,
+                    COALESCE(w.status, CASE WHEN COALESCE(w.ended_at, w.finished_at) IS NULL THEN 'active' ELSE 'completed' END) AS status,
+                    w.notes,
+                    w.created_at,
+                    w.updated_at,
+                    COALESCE(SUM(sl.volume), 0) AS total_volume,
+                    COUNT(sl.id) AS total_sets,
+                    COUNT(DISTINCT sl.exercise_id) AS exercise_count,
+                    COUNT(DISTINCT sl.equipment_id) AS equipment_count
+                FROM workouts w
+                LEFT JOIN set_logs sl ON sl.workout_id = w.id
+                {where_sql}
+                GROUP BY w.id, w.user_id, w.started_at, w.ended_at, w.finished_at, w.status, w.notes, w.created_at, w.updated_at
+                ORDER BY w.started_at DESC, w.id DESC
+                LIMIT ? OFFSET ?
+                """,
+                (*params, query_limit, query_offset),
+            ).fetchall()
+            return [_row_to_dict(row) for row in rows if row is not None]
+
+    def _get_workout(self, workout_id: int) -> dict[str, Any] | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT
+                    w.id,
+                    w.user_id,
+                    w.started_at,
+                    COALESCE(w.ended_at, w.finished_at) AS ended_at,
+                    COALESCE(w.status, CASE WHEN COALESCE(w.ended_at, w.finished_at) IS NULL THEN 'active' ELSE 'completed' END) AS status,
+                    w.notes,
+                    w.created_at,
+                    w.updated_at
+                FROM workouts w
+                WHERE w.id = ?
+                LIMIT 1
+                """,
+                (int(workout_id),),
+            ).fetchone()
+            return _row_to_dict(row)
+
+    def _create_workout(
+        self,
+        user_id: str,
+        started_at: datetime,
+        ended_at: datetime | None,
+        notes: str | None,
+        status: str,
+    ) -> dict[str, Any]:
+        started_iso = _isoformat(started_at)
+        ended_iso = _isoformat(ended_at) if ended_at is not None else None
+        now_iso = _isoformat(datetime.now(timezone.utc))
+        normalized_status = (
+            str(status).strip().lower()
+            if isinstance(status, str) and str(status).strip()
+            else ("active" if ended_iso is None else "completed")
+        )
+        with self._connect() as conn:
+            cursor = conn.execute(
+                """
+                INSERT INTO workouts(
+                    user_id, started_at, finished_at, ended_at, status, notes, created_at, updated_at
+                )
+                VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    user_id,
+                    started_iso,
+                    ended_iso,
+                    ended_iso,
+                    normalized_status,
+                    notes,
+                    now_iso,
+                    now_iso,
+                ),
+            )
+            workout_id = int(cursor.lastrowid)
+            conn.commit()
+        row = self._get_workout(workout_id)
+        if row is None:
+            raise ValueError(f"Workout {workout_id} not found after create")
+        return row
+
+    def _update_workout(
+        self,
+        workout_id: int,
+        started_at: datetime | None,
+        ended_at: datetime | None,
+        notes: str | None,
+        status: str | None,
+    ) -> dict[str, Any]:
+        workout_id = int(workout_id)
+        with self._connect() as conn:
+            existing = conn.execute(
+                "SELECT id, started_at, ended_at, finished_at, status, notes FROM workouts WHERE id = ?",
+                (workout_id,),
+            ).fetchone()
+            if existing is None:
+                raise ValueError(f"Workout {workout_id} not found")
+
+            existing_started = _parse_iso_datetime(existing["started_at"])
+            existing_ended = _parse_iso_datetime(existing["ended_at"] or existing["finished_at"])
+            new_started = started_at or existing_started
+            new_ended = ended_at if ended_at is not None else existing_ended
+            if new_started is not None and new_ended is not None and new_started > new_ended:
+                raise ValueError("started_at must be before or equal to ended_at")
+
+            updates: list[str] = []
+            params: list[Any] = []
+            if started_at is not None:
+                updates.append("started_at = ?")
+                params.append(_isoformat(started_at))
+            if ended_at is not None:
+                ended_iso = _isoformat(ended_at)
+                updates.append("ended_at = ?")
+                updates.append("finished_at = ?")
+                params.extend([ended_iso, ended_iso])
+            if notes is not None:
+                updates.append("notes = ?")
+                params.append(notes)
+            if status is not None:
+                updates.append("status = ?")
+                params.append(str(status).strip().lower())
+            if not updates:
+                raise ValueError("No workout update fields provided")
+
+            updates.append("updated_at = ?")
+            params.append(_isoformat(datetime.now(timezone.utc)))
+            params.append(workout_id)
+            conn.execute(
+                f"UPDATE workouts SET {', '.join(updates)} WHERE id = ?",
+                tuple(params),
+            )
+            conn.commit()
+        row = self._get_workout(workout_id)
+        if row is None:
+            raise ValueError(f"Workout {workout_id} not found after update")
+        return row
+
+    def _delete_workout(self, workout_id: int, delete_sets: bool) -> None:
+        workout_id = int(workout_id)
+        with self._connect() as conn:
+            existing = conn.execute(
+                "SELECT id FROM workouts WHERE id = ?",
+                (workout_id,),
+            ).fetchone()
+            if existing is None:
+                raise ValueError(f"Workout {workout_id} not found")
+            if delete_sets:
+                conn.execute("DELETE FROM set_logs WHERE workout_id = ?", (workout_id,))
+            else:
+                conn.execute("UPDATE set_logs SET workout_id = NULL WHERE workout_id = ?", (workout_id,))
+            conn.execute("DELETE FROM workouts WHERE id = ?", (workout_id,))
+            conn.commit()
+
+    def _get_sets_for_workout(self, workout_id: int) -> list[dict[str, Any]]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT
+                    sl.id,
+                    sl.workout_id,
+                    sl.user_id,
+                    sl.equipment_id,
+                    eq.name AS equipment_name,
+                    sl.exercise_id,
+                    ex.name_en AS exercise_name_en,
+                    ex.name_de AS exercise_name_de,
+                    sl.exercise,
+                    sl.weight,
+                    sl.reps,
+                    sl.volume,
+                    sl.notes,
+                    sl.created_at,
+                    sl.updated_at
+                FROM set_logs sl
+                LEFT JOIN equipment eq ON eq.id = sl.equipment_id
+                LEFT JOIN exercises ex ON ex.id = sl.exercise_id
+                WHERE sl.workout_id = ?
+                ORDER BY sl.created_at ASC, sl.id ASC
+                """,
+                (int(workout_id),),
+            ).fetchall()
+            return [_row_to_dict(row) for row in rows if row is not None]
+
+    def _add_set_to_workout(
+        self,
+        workout_id: int,
+        user_id: str,
+        equipment_id: str | None,
+        exercise_id: str,
+        weight: float,
+        reps: int,
+        notes: str | None,
+        created_at: datetime | None,
+    ) -> dict[str, Any]:
+        workout_id = int(workout_id)
+        resolved_weight = float(weight)
+        resolved_reps = int(reps)
+        volume = resolved_weight * resolved_reps
+        with self._connect() as conn:
+            workout_row = conn.execute(
+                "SELECT id, started_at FROM workouts WHERE id = ?",
+                (workout_id,),
+            ).fetchone()
+            if workout_row is None:
+                raise ValueError(f"Workout {workout_id} not found")
+
+            exercise_row = conn.execute(
+                "SELECT id, name_en, name_de FROM exercises WHERE id = ?",
+                (exercise_id,),
+            ).fetchone()
+            if exercise_row is None:
+                raise ValueError(f"Exercise '{exercise_id}' not found")
+
+            resolved_created_at = (
+                _isoformat(created_at)
+                if created_at is not None
+                else str(workout_row["started_at"] or _isoformat(datetime.now(timezone.utc)))
+            )
+            resolved_updated_at = _isoformat(datetime.now(timezone.utc))
+            exercise_display = str(
+                exercise_row["name_en"] or exercise_row["name_de"] or exercise_id
+            )
+            cursor = conn.execute(
+                """
+                INSERT INTO set_logs(
+                    workout_id, user_id, equipment_id, exercise_id, exercise, weight, reps, volume, notes, created_at, updated_at
+                )
+                VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    workout_id,
+                    user_id,
+                    equipment_id,
+                    exercise_id,
+                    exercise_display,
+                    resolved_weight,
+                    resolved_reps,
+                    volume,
+                    notes,
+                    resolved_created_at,
+                    resolved_updated_at,
+                ),
+            )
+            set_id = int(cursor.lastrowid)
+            conn.commit()
+        rows = self._get_sets_for_workout(workout_id)
+        for row in rows:
+            if int(row.get("id", -1)) == set_id:
+                return row
+        raise ValueError(f"Set {set_id} not found after create")
+
+    def _update_set(
+        self,
+        set_id: int,
+        equipment_id: str | None,
+        exercise_id: str | None,
+        weight: float | None,
+        reps: int | None,
+        notes: str | None,
+        created_at: datetime | None,
+    ) -> dict[str, Any]:
+        set_id = int(set_id)
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT id, workout_id, equipment_id, exercise_id, exercise, weight, reps, volume, notes, created_at
+                FROM set_logs
+                WHERE id = ?
+                LIMIT 1
+                """,
+                (set_id,),
+            ).fetchone()
+            if row is None:
+                raise ValueError(f"Set {set_id} not found")
+
+            updates: list[str] = []
+            params: list[Any] = []
+            resolved_exercise_id = str(row["exercise_id"] or "")
+            resolved_exercise_display = str(row["exercise"] or resolved_exercise_id)
+            if exercise_id is not None:
+                exercise_row = conn.execute(
+                    "SELECT id, name_en, name_de FROM exercises WHERE id = ?",
+                    (exercise_id,),
+                ).fetchone()
+                if exercise_row is None:
+                    raise ValueError(f"Exercise '{exercise_id}' not found")
+                resolved_exercise_id = str(exercise_row["id"])
+                resolved_exercise_display = str(
+                    exercise_row["name_en"] or exercise_row["name_de"] or resolved_exercise_id
+                )
+                updates.append("exercise_id = ?")
+                params.append(resolved_exercise_id)
+                updates.append("exercise = ?")
+                params.append(resolved_exercise_display)
+
+            if equipment_id is not None:
+                updates.append("equipment_id = ?")
+                params.append(equipment_id)
+
+            resolved_weight = float(weight) if weight is not None else float(row["weight"])
+            resolved_reps = int(reps) if reps is not None else int(row["reps"])
+            if weight is not None:
+                updates.append("weight = ?")
+                params.append(resolved_weight)
+            if reps is not None:
+                updates.append("reps = ?")
+                params.append(resolved_reps)
+            if weight is not None or reps is not None:
+                updates.append("volume = ?")
+                params.append(float(resolved_weight * resolved_reps))
+
+            if notes is not None:
+                updates.append("notes = ?")
+                params.append(notes)
+            if created_at is not None:
+                updates.append("created_at = ?")
+                params.append(_isoformat(created_at))
+
+            if not updates:
+                raise ValueError("No set update fields provided")
+
+            updates.append("updated_at = ?")
+            params.append(_isoformat(datetime.now(timezone.utc)))
+            params.append(set_id)
+            conn.execute(
+                f"UPDATE set_logs SET {', '.join(updates)} WHERE id = ?",
+                tuple(params),
+            )
+            conn.commit()
+
+            updated = conn.execute(
+                """
+                SELECT
+                    sl.id,
+                    sl.workout_id,
+                    sl.user_id,
+                    sl.equipment_id,
+                    eq.name AS equipment_name,
+                    sl.exercise_id,
+                    ex.name_en AS exercise_name_en,
+                    ex.name_de AS exercise_name_de,
+                    sl.exercise,
+                    sl.weight,
+                    sl.reps,
+                    sl.volume,
+                    sl.notes,
+                    sl.created_at,
+                    sl.updated_at
+                FROM set_logs sl
+                LEFT JOIN equipment eq ON eq.id = sl.equipment_id
+                LEFT JOIN exercises ex ON ex.id = sl.exercise_id
+                WHERE sl.id = ?
+                LIMIT 1
+                """,
+                (set_id,),
+            ).fetchone()
+            if updated is None:
+                raise ValueError(f"Set {set_id} not found after update")
+            return _row_to_dict(updated) or {}
+
+    def _delete_set(self, set_id: int) -> None:
+        set_id = int(set_id)
+        with self._connect() as conn:
+            existing = conn.execute(
+                "SELECT id FROM set_logs WHERE id = ?",
+                (set_id,),
+            ).fetchone()
+            if existing is None:
+                raise ValueError(f"Set {set_id} not found")
+            conn.execute("DELETE FROM set_logs WHERE id = ?", (set_id,))
+            conn.commit()
 
     def _get_total_volume(self, user_id: str | None) -> float:
         sql = "SELECT COALESCE(SUM(volume), 0) AS value FROM set_logs"
@@ -1453,7 +1965,7 @@ class HAFitnessStore:
                 f"""
                 SELECT
                     COUNT(*) AS workout_count,
-                    MAX(COALESCE(w.finished_at, w.started_at)) AS last_workout_at
+                    MAX(COALESCE(w.ended_at, w.finished_at, w.started_at)) AS last_workout_at
                 FROM workouts w
                 WHERE w.started_at >= ?
                   AND w.started_at < ?
@@ -2393,6 +2905,21 @@ def _resolve_weight_factor(role: str, weight_factor: float) -> float:
     if resolved <= 0:
         return DEFAULT_MUSCLE_ROLE_WEIGHT_FACTORS.get(role, 1.0)
     return resolved
+
+
+def _parse_iso_datetime(value: Any) -> datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    normalized = value.strip()
+    if normalized.endswith("Z"):
+        normalized = normalized[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 def _isoformat(value: datetime) -> str:

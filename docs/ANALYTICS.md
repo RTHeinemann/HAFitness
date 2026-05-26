@@ -146,3 +146,40 @@ content: >-
   Top Muskelgruppe: **{{ top_mg or 'n/a' }}**  
   Push/Pull/Legs: **{{ (cur.get('push_percent', 0) | float(0)) | round(0) }}% / {{ (cur.get('pull_percent', 0) | float(0)) | round(0) }}% / {{ (cur.get('legs_percent', 0) | float(0)) | round(0) }}%**
 ```
+
+## Recent Workouts (Aggregate Sensor)
+
+Workout management v1 adds one aggregate sensor:
+
+- `sensor.ha_fitness_personal_recent_workouts`
+
+It intentionally keeps entity count low and returns workout/set history in attributes.
+
+### Example (Template Card)
+
+```yaml
+type: markdown
+title: Letzte Trainings
+content: >-
+  {% set rows = state_attr('sensor.ha_fitness_personal_recent_workouts', 'workouts') or [] %}
+  {% for w in rows[:5] %}
+  - **#{{ w.workout_id }}** {{ w.started_at }} ({{ w.total_sets }} Sätze, {{ (w.total_volume | float(0)) | round(1) }} kg)
+  {% endfor %}
+```
+
+### Example Service Buttons
+
+```yaml
+type: entities
+title: Workout Aktionen
+entities:
+  - type: button
+    name: Training erstellen
+    tap_action:
+      action: call-service
+      service: ha_fitness.create_workout
+      data:
+        started_at: "2026-05-26T08:00:00+02:00"
+        ended_at: "2026-05-26T09:00:00+02:00"
+        status: "completed"
+```
