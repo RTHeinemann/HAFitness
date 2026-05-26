@@ -189,7 +189,9 @@ def _register_services(hass: HomeAssistant) -> None:
             else None
         )
         for coordinator in _all_coordinators():
-            coordinator.set_active_equipment(equipment_id)
+            coordinator.set_active_equipment(
+                equipment_id, context_user_id=call.context.user_id
+            )
 
     async def handle_add_exercise(call: ServiceCall) -> None:
         exercise_id: str = call.data[ATTR_EXERCISE_ID].strip().lower()

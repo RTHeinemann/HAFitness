@@ -328,8 +328,14 @@ class HAFitnessCoordinator:
         _LOGGER.debug("HAGym: active exercise option set to %s -> %s", option, exercise_id)
         self._notify_listeners()
 
-    def set_active_equipment(self, equipment_id: str | None) -> None:
+    def set_active_equipment(
+        self, equipment_id: str | None, context_user_id: str | None = None
+    ) -> None:
         """Update currently selected equipment id (None means no filter)."""
+        if context_user_id:
+            self._current_user_id = context_user_id
+            if self._selected_user_id is None:
+                self._selected_user_id = context_user_id
         if equipment_id is not None:
             row = self._equipment_by_id.get(equipment_id)
             if row is None:
@@ -884,26 +890,9 @@ class HAFitnessCoordinator:
     async def async_initialize(self) -> None:
         """Restore persisted state on integration startup."""
         try:
-            await self.resolve_user_id(None)
             await self.async_refresh_users()
             await self.async_refresh_equipment(notify=False)
             await self.async_refresh_exercises(notify=False)
-
-            open_workout = await self._store.async_get_current_open_workout(self._selected_user_id or LEGACY_USER_ID)
-            if open_workout is not None:
-                self._current_workout_id = int(open_workout["id"])
-                self._current_workout_started_at = str(open_workout["started_at"])
-                self._current_workout_user_id = str(open_workout.get("user_id") or LEGACY_USER_ID)
-                self._workout_state = STATE_ACTIVE
-                self._current_set_number = await self._store.async_get_set_count_for_workout(
-                    self._current_workout_id
-                )
-            else:
-                self._current_workout_id = None
-                self._current_workout_started_at = None
-                self._current_workout_user_id = None
-                self._workout_state = STATE_READY
-                self._current_set_number = 0
 
             last_set = await self._store.async_get_last_set()
             if last_set is not None:
@@ -929,6 +918,28 @@ class HAFitnessCoordinator:
                 self._last_saved_set = None
                 self._last_set_summary = None
 
+            open_workout = await self._store.async_get_current_open_workout(
+                self._resolve_personal_user_id()
+            )
+            if open_workout is not None:
+                self._current_workout_id = int(open_workout["id"])
+                self._current_workout_started_at = str(open_workout["started_at"])
+                self._current_workout_user_id = str(open_workout.get("user_id") or LEGACY_USER_ID)
+                if self._current_user_id is None:
+                    self._current_user_id = self._current_workout_user_id
+                if self._selected_user_id is None:
+                    self._selected_user_id = self._current_workout_user_id
+                self._workout_state = STATE_ACTIVE
+                self._current_set_number = await self._store.async_get_set_count_for_workout(
+                    self._current_workout_id
+                )
+            else:
+                self._current_workout_id = None
+                self._current_workout_started_at = None
+                self._current_workout_user_id = None
+                self._workout_state = STATE_READY
+                self._current_set_number = 0
+
             await self.async_refresh_statistics(notify=False)
         except sqlite3.Error as err:
             _LOGGER.exception("HAGym: failed to initialize coordinator from SQLite")
@@ -940,17 +951,12 @@ class HAFitnessCoordinator:
         """Refresh known users from storage."""
         self._users = await self._store.async_get_users()
 
-        if self._selected_user_id is None:
-            if self._current_user_id is not None:
-                self._selected_user_id = self._current_user_id
-            elif self._users:
-                self._selected_user_id = str(self._users[0]["id"])
-            else:
-                self._selected_user_id = LEGACY_USER_ID
+        if self._selected_user_id is None and self._current_user_id is not None:
+            self._selected_user_id = self._current_user_id
 
     async def resolve_user_id(self, context_user_id: str | None) -> str:
         """Resolve effective user id from service context and upsert into users table."""
-        resolved = context_user_id or self._selected_user_id or self._current_user_id or LEGACY_USER_ID
+        resolved = context_user_id or self._resolve_personal_user_id()
         fallback_display_name = context_user_id if context_user_id else resolved
         await self._store.async_upsert_user(resolved, fallback_display_name)
 
@@ -964,12 +970,30 @@ class HAFitnessCoordinator:
 
         return resolved
 
+    def _resolve_personal_user_id(self) -> str:
+        """Return the user id used for personal statistics."""
+        if self._selected_user_id:
+            return self._selected_user_id
+        if self._current_user_id:
+            return self._current_user_id
+        if self._current_workout_user_id:
+            return self._current_workout_user_id
+        if self._last_saved_set:
+            last_saved_user_id = self._last_saved_set.get("user_id")
+            if isinstance(last_saved_user_id, str) and last_saved_user_id:
+                return last_saved_user_id
+        return LEGACY_USER_ID
+
     async def async_refresh_statistics(self, notify: bool = True) -> None:
         """Refresh cached statistics from SQLite."""
         try:
             await self.async_refresh_users()
             await self.async_refresh_equipment(notify=False)
-            personal_user_id = self._selected_user_id or self._current_user_id or LEGACY_USER_ID
+            personal_user_id = self._resolve_personal_user_id()
+            _LOGGER.debug(
+                "HAGym personal statistics user_id resolved to %s",
+                personal_user_id,
+            )
 
             self._total_volume = await self._store.async_get_total_volume()
             self._total_sets = await self._store.async_get_set_count()
@@ -995,7 +1019,19 @@ class HAFitnessCoordinator:
                 10, household_user_ids
             )
 
-            for exercise_id in EXERCISE_IDS:
+            statistics_exercise_ids = list(
+                dict.fromkeys(
+                    [
+                        *EXERCISE_IDS,
+                        *[
+                            str(row["id"])
+                            for row in self._exercises
+                            if row.get("id") is not None
+                        ],
+                    ]
+                )
+            )
+            for exercise_id in statistics_exercise_ids:
                 self._pr_by_exercise[exercise_id] = await self._store.async_get_pr_by_exercise(exercise_id)
                 self._volume_by_exercise[
                     exercise_id
@@ -1148,7 +1184,7 @@ class HAFitnessCoordinator:
                 "equipment_statistics": self._equipment_statistics,
             },
             "personal": {
-                "user_id": self._selected_user_id or self._current_user_id or LEGACY_USER_ID,
+                "user_id": self._resolve_personal_user_id(),
                 "total_volume": self._personal_total_volume,
                 "total_sets": self._personal_total_sets,
                 "total_workouts": self._personal_total_workouts,

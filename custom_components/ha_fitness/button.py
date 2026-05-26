@@ -127,4 +127,6 @@ class HAFitnessEquipmentSelectButton(ButtonEntity):
         return self._coordinator.equipment_enabled(self._equipment_id)
 
     async def async_press(self) -> None:
-        self._coordinator.set_active_equipment(self._equipment_id)
+        self._coordinator.set_active_equipment(
+            self._equipment_id, context_user_id=self._context.user_id
+        )
