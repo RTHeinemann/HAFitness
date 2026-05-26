@@ -584,6 +584,9 @@
       "personal_weekly_muscle_group_statistics": {
         "name": "Personal Weekly Muscle Group Statistics"
       },
+      "personal_weekly_volume_history": {
+        "name": "Personal weekly volume history"
+      },
       "personal_training_balance": {
         "name": "Personal Training Balance"
       },

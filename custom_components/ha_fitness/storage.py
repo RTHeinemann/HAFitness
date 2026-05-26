@@ -24,6 +24,25 @@ from .const import (
 from .migrations import apply_migrations
 
 _LOGGER = logging.getLogger(__name__)
+_WEEKLY_HISTORY_PUSH_IDS = {"chest", "shoulders", "triceps"}
+_WEEKLY_HISTORY_PULL_IDS = {
+    "back",
+    "lats",
+    "rhomboids",
+    "traps",
+    "biceps",
+    "forearms",
+    "erector_spinae",
+}
+_WEEKLY_HISTORY_LEGS_IDS = {
+    "quadriceps",
+    "hamstrings",
+    "glutes",
+    "calves",
+    "adductors",
+    "abductors",
+}
+_WEEKLY_HISTORY_CORE_IDS = {"core", "abs", "obliques"}
 
 
 class HAFitnessStore:
@@ -515,6 +534,20 @@ class HAFitnessStore:
             self._get_weekly_user_statistics,
             start_utc,
             end_utc,
+            user_ids,
+        )
+
+    async def async_get_weekly_volume_history(
+        self,
+        week_ranges: list[dict[str, Any]],
+        user_id: str | None = None,
+        user_ids: list[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Return per-week personal/household/global volume history rows."""
+        return await self._hass.async_add_executor_job(
+            self._get_weekly_volume_history,
+            week_ranges,
+            user_id,
             user_ids,
         )
 
@@ -1645,6 +1678,120 @@ class HAFitnessStore:
                     }
                 )
             return result
+
+    def _get_weekly_volume_history(
+        self,
+        week_ranges: list[dict[str, Any]],
+        user_id: str | None,
+        user_ids: list[str] | None,
+    ) -> list[dict[str, Any]]:
+        rows: list[dict[str, Any]] = []
+        for week_range in week_ranges:
+            week_start_utc = str(week_range.get("week_start_utc") or "")
+            week_end_utc = str(week_range.get("week_end_utc") or "")
+            if not week_start_utc or not week_end_utc:
+                continue
+
+            summary = self._get_weekly_summary(week_start_utc, week_end_utc, user_id, user_ids)
+            exercise_rows = self._get_weekly_exercise_statistics(
+                week_start_utc, week_end_utc, user_id, user_ids
+            )
+            muscle_rows = self._get_weekly_muscle_group_statistics(
+                week_start_utc, week_end_utc, user_id, user_ids
+            )
+
+            push_volume = 0.0
+            pull_volume = 0.0
+            legs_volume = 0.0
+            core_volume = 0.0
+            for muscle_row in muscle_rows:
+                muscle_group_id = str(muscle_row.get("muscle_group_id") or "")
+                weighted_volume = float(muscle_row.get("volume", 0.0))
+                if muscle_group_id in _WEEKLY_HISTORY_PUSH_IDS:
+                    push_volume += weighted_volume
+                elif muscle_group_id in _WEEKLY_HISTORY_PULL_IDS:
+                    pull_volume += weighted_volume
+                elif muscle_group_id in _WEEKLY_HISTORY_LEGS_IDS:
+                    legs_volume += weighted_volume
+                elif muscle_group_id in _WEEKLY_HISTORY_CORE_IDS:
+                    core_volume += weighted_volume
+
+            categorized_volume_total = push_volume + pull_volume + legs_volume + core_volume
+            upper_body_volume = push_volume + pull_volume
+            lower_body_volume = legs_volume
+
+            if categorized_volume_total > 0:
+                push_percent = (push_volume / categorized_volume_total) * 100.0
+                pull_percent = (pull_volume / categorized_volume_total) * 100.0
+                legs_percent = (legs_volume / categorized_volume_total) * 100.0
+                core_percent = (core_volume / categorized_volume_total) * 100.0
+                upper_body_percent = (upper_body_volume / categorized_volume_total) * 100.0
+                lower_body_percent = (lower_body_volume / categorized_volume_total) * 100.0
+            else:
+                push_percent = 0.0
+                pull_percent = 0.0
+                legs_percent = 0.0
+                core_percent = 0.0
+                upper_body_percent = 0.0
+                lower_body_percent = 0.0
+
+            top_exercise = exercise_rows[0] if exercise_rows else None
+            top_muscle = muscle_rows[0] if muscle_rows else None
+            rows.append(
+                {
+                    "week_start": week_range.get("week_start_local"),
+                    "week_end": week_range.get("week_end_local"),
+                    "week_label": week_range.get("week_label"),
+                    "iso_year": int(week_range.get("iso_year", 0) or 0),
+                    "iso_week": int(week_range.get("iso_week", 0) or 0),
+                    "total_volume": float(summary.get("total_volume", 0.0)),
+                    "categorized_volume_total": float(categorized_volume_total),
+                    "push_volume": float(push_volume),
+                    "pull_volume": float(pull_volume),
+                    "legs_volume": float(legs_volume),
+                    "core_volume": float(core_volume),
+                    "upper_body_volume": float(upper_body_volume),
+                    "lower_body_volume": float(lower_body_volume),
+                    "push_percent": float(push_percent),
+                    "pull_percent": float(pull_percent),
+                    "legs_percent": float(legs_percent),
+                    "core_percent": float(core_percent),
+                    "upper_body_percent": float(upper_body_percent),
+                    "lower_body_percent": float(lower_body_percent),
+                    "total_sets": int(summary.get("total_sets", 0)),
+                    "workout_count": int(summary.get("workout_count", 0)),
+                    "active_days": int(summary.get("active_days", 0)),
+                    "top_exercise_id": (
+                        str(top_exercise.get("exercise_id"))
+                        if top_exercise is not None and top_exercise.get("exercise_id")
+                        else None
+                    ),
+                    "top_exercise_name_en": (
+                        top_exercise.get("name_en") if top_exercise is not None else None
+                    ),
+                    "top_exercise_name_de": (
+                        top_exercise.get("name_de") if top_exercise is not None else None
+                    ),
+                    "top_exercise_volume": float(
+                        top_exercise.get("volume", 0.0) if top_exercise is not None else 0.0
+                    ),
+                    "top_muscle_group_id": (
+                        str(top_muscle.get("muscle_group_id"))
+                        if top_muscle is not None and top_muscle.get("muscle_group_id")
+                        else None
+                    ),
+                    "top_muscle_group_name_en": (
+                        top_muscle.get("name_en") if top_muscle is not None else None
+                    ),
+                    "top_muscle_group_name_de": (
+                        top_muscle.get("name_de") if top_muscle is not None else None
+                    ),
+                    "top_muscle_group_volume": float(
+                        top_muscle.get("volume", 0.0) if top_muscle is not None else 0.0
+                    ),
+                }
+            )
+        return rows
 
     def _get_household_total_volume(self, user_ids: list[str] | None) -> float:
         with self._connect() as conn:

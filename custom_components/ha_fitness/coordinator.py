@@ -18,6 +18,8 @@ from .storage import HAFitnessStore
 
 _LOGGER = logging.getLogger(__name__)
 _ANALYTICS_TOP_LIMIT = 20
+_WEEKLY_HISTORY_DEFAULT_WEEKS = 12
+_WEEKLY_HISTORY_MAX_WEEKS = 26
 _PUSH_MUSCLE_GROUP_IDS = {"chest", "shoulders", "triceps"}
 _PULL_MUSCLE_GROUP_IDS = {
     "back",
@@ -89,6 +91,7 @@ class HAFitnessCoordinator:
         self._personal_weekly_summary: dict[str, Any] = {}
         self._personal_weekly_exercise_statistics: dict[str, Any] = {}
         self._personal_weekly_muscle_group_statistics: dict[str, Any] = {}
+        self._personal_weekly_volume_history: dict[str, Any] = {}
         self._personal_training_balance: dict[str, Any] = {}
         self._household_weekly_summary: dict[str, Any] = {}
         self._locale: str = str(hass.config.language or "en")
@@ -358,6 +361,9 @@ class HAFitnessCoordinator:
 
     def get_personal_weekly_muscle_group_statistics(self) -> dict[str, Any]:
         return self._personal_weekly_muscle_group_statistics
+
+    def get_personal_weekly_volume_history(self) -> dict[str, Any]:
+        return self._personal_weekly_volume_history
 
     def get_personal_training_balance(self) -> dict[str, Any]:
         return self._personal_training_balance
@@ -994,6 +1000,10 @@ class HAFitnessCoordinator:
             week_end=week_end_local,
             muscle_groups=personal_muscles_payload,
         )
+        await self.async_refresh_weekly_volume_history(
+            notify=False,
+            personal_user_id=effective_personal_user_id,
+        )
 
         household_summary_base = await self._store.async_get_weekly_summary(
             week_start_utc,
@@ -1109,6 +1119,87 @@ class HAFitnessCoordinator:
             "last_workout_at": household_summary_base.get("last_workout_at"),
         }
 
+        if notify:
+            self._notify_listeners()
+
+    async def async_refresh_weekly_volume_history(
+        self,
+        notify: bool = True,
+        *,
+        personal_user_id: str | None = None,
+    ) -> None:
+        """Refresh personal weekly volume history cache."""
+        effective_personal_user_id = personal_user_id or self._resolve_personal_user_id()
+        timezone_name, week_ranges = _weekly_ranges(
+            self.hass,
+            weeks=_WEEKLY_HISTORY_DEFAULT_WEEKS,
+            max_weeks=_WEEKLY_HISTORY_MAX_WEEKS,
+        )
+        history_rows = await self._store.async_get_weekly_volume_history(
+            week_ranges,
+            user_id=effective_personal_user_id,
+        )
+        weeks_payload: list[dict[str, Any]] = []
+        for row in history_rows:
+            localized_top_exercise_name = self._exercise_name_from_row(
+                {
+                    "exercise_id": row.get("top_exercise_id"),
+                    "name_en": row.get("top_exercise_name_en"),
+                    "name_de": row.get("top_exercise_name_de"),
+                }
+            )
+            localized_top_muscle_name = self._muscle_group_name_from_row(
+                {
+                    "muscle_group_id": row.get("top_muscle_group_id"),
+                    "name_en": row.get("top_muscle_group_name_en"),
+                    "name_de": row.get("top_muscle_group_name_de"),
+                }
+            )
+            weeks_payload.append(
+                {
+                    "week_start": row.get("week_start"),
+                    "week_end": row.get("week_end"),
+                    "week_label": row.get("week_label"),
+                    "iso_year": int(row.get("iso_year", 0)),
+                    "iso_week": int(row.get("iso_week", 0)),
+                    "total_volume": float(row.get("total_volume", 0.0)),
+                    "categorized_volume_total": float(
+                        row.get("categorized_volume_total", 0.0)
+                    ),
+                    "push_volume": float(row.get("push_volume", 0.0)),
+                    "pull_volume": float(row.get("pull_volume", 0.0)),
+                    "legs_volume": float(row.get("legs_volume", 0.0)),
+                    "core_volume": float(row.get("core_volume", 0.0)),
+                    "upper_body_volume": float(row.get("upper_body_volume", 0.0)),
+                    "lower_body_volume": float(row.get("lower_body_volume", 0.0)),
+                    "push_percent": float(row.get("push_percent", 0.0)),
+                    "pull_percent": float(row.get("pull_percent", 0.0)),
+                    "legs_percent": float(row.get("legs_percent", 0.0)),
+                    "core_percent": float(row.get("core_percent", 0.0)),
+                    "upper_body_percent": float(row.get("upper_body_percent", 0.0)),
+                    "lower_body_percent": float(row.get("lower_body_percent", 0.0)),
+                    "total_sets": int(row.get("total_sets", 0)),
+                    "workout_count": int(row.get("workout_count", 0)),
+                    "active_days": int(row.get("active_days", 0)),
+                    "top_exercise_id": row.get("top_exercise_id"),
+                    "top_exercise_name": localized_top_exercise_name,
+                    "top_exercise_volume": float(row.get("top_exercise_volume", 0.0)),
+                    "top_muscle_group_id": row.get("top_muscle_group_id"),
+                    "top_muscle_group_name": localized_top_muscle_name,
+                    "top_muscle_group_volume": float(
+                        row.get("top_muscle_group_volume", 0.0)
+                    ),
+                }
+            )
+        current_week = weeks_payload[-1] if weeks_payload else {}
+        self._personal_weekly_volume_history = {
+            "user_id": effective_personal_user_id,
+            "timezone": timezone_name,
+            "week_count": len(weeks_payload),
+            "current_week_start": current_week.get("week_start"),
+            "current_week_end": current_week.get("week_end"),
+            "weeks": weeks_payload,
+        }
         if notify:
             self._notify_listeners()
 
@@ -1847,6 +1938,7 @@ class HAFitnessCoordinator:
                 "weekly_summary": self._personal_weekly_summary,
                 "weekly_exercise_statistics": self._personal_weekly_exercise_statistics,
                 "weekly_muscle_group_statistics": self._personal_weekly_muscle_group_statistics,
+                "weekly_volume_history": self._personal_weekly_volume_history,
                 "training_balance": self._personal_training_balance,
             },
             "household": {
@@ -2339,6 +2431,41 @@ def _current_week_bounds(hass: HomeAssistant) -> tuple[str, str, str, str, str]:
         week_start.astimezone(timezone.utc).isoformat(),
         week_end.astimezone(timezone.utc).isoformat(),
     )
+
+
+def _weekly_ranges(
+    hass: HomeAssistant, weeks: int = 12, max_weeks: int = 26
+) -> tuple[str, list[dict[str, Any]]]:
+    requested_weeks = max(1, min(int(weeks), int(max_weeks)))
+    timezone_name = str(hass.config.time_zone or "UTC")
+    try:
+        local_tz = ZoneInfo(timezone_name)
+    except Exception:
+        timezone_name = "UTC"
+        local_tz = ZoneInfo("UTC")
+
+    now_local = datetime.now(local_tz)
+    current_week_start = (now_local - timedelta(days=now_local.weekday())).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+    rows: list[dict[str, Any]] = []
+    for offset in range(requested_weeks - 1, -1, -1):
+        week_start = current_week_start - timedelta(days=7 * offset)
+        week_end = week_start + timedelta(days=7)
+        iso_year, iso_week, _ = week_start.isocalendar()
+        rows.append(
+            {
+                "week_start_local": week_start.isoformat(),
+                "week_end_local": week_end.isoformat(),
+                "week_start_utc": week_start.astimezone(timezone.utc).isoformat(),
+                "week_end_utc": week_end.astimezone(timezone.utc).isoformat(),
+                "iso_year": int(iso_year),
+                "iso_week": int(iso_week),
+                "week_label": f"KW {int(iso_week):02d}",
+                "timezone": timezone_name,
+            }
+        )
+    return timezone_name, rows
 
 
 def _safe_div(numerator: float, denominator: int) -> float:

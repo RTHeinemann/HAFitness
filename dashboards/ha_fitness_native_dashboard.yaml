@@ -53,6 +53,7 @@ views:
         title: Weekly Analytics
         entities:
           - entity: sensor.ha_fitness_personal_weekly_summary
+          - entity: sensor.ha_fitness_personal_weekly_volume_history
           - entity: sensor.ha_fitness_household_weekly_summary
           - entity: sensor.ha_fitness_personal_training_balance
           - entity: sensor.ha_fitness_personal_weekly_exercise_statistics

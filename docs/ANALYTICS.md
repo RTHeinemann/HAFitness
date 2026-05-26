@@ -13,22 +13,23 @@ Goal:
 - `sensor.ha_fitness_personal_weekly_summary`
 - `sensor.ha_fitness_personal_weekly_exercise_statistics`
 - `sensor.ha_fitness_personal_weekly_muscle_group_statistics`
+- `sensor.ha_fitness_personal_weekly_volume_history`
 - `sensor.ha_fitness_personal_training_balance`
 - `sensor.ha_fitness_household_weekly_summary`
 
 ## Timeframe
 
-Current week only (v1):
+Current week summary sensors:
 
 - Week start: Monday 00:00 (Home Assistant local timezone)
 - Week end: next Monday 00:00
 - SQLite query boundaries are converted to UTC ISO timestamps
 
-Each sensor exposes:
+`sensor.ha_fitness_personal_weekly_volume_history`:
 
-- `week_start`
-- `week_end`
-- `timezone`
+- Returns the last 12 weeks (including current week) in one attribute list.
+- Uses weighted muscle-group volume and category buckets (push/pull/legs/core).
+- Keeps entity count low by exposing history as attributes instead of extra entities.
 
 ## Personal vs Household Scope
 
@@ -45,6 +46,7 @@ type: entities
 title: HAGym Weekly Analytics
 entities:
   - entity: sensor.ha_fitness_personal_weekly_summary
+  - entity: sensor.ha_fitness_personal_weekly_volume_history
   - entity: sensor.ha_fitness_household_weekly_summary
   - entity: sensor.ha_fitness_personal_training_balance
 ```
@@ -85,6 +87,62 @@ content: >-
   {% endfor %}
 ```
 
-## Optional ApexCharts
+## ApexCharts (Optional)
 
-ApexCharts is optional. If installed, weekly trend/history charts can be added later by reading these aggregate attributes or by adding dedicated trend endpoints in a future version.
+```yaml
+type: custom:apexcharts-card
+header:
+  show: true
+  title: Trainingsvolumen pro Woche
+  show_states: true
+  colorize_states: true
+chart_type: bar
+stacked: true
+span:
+  start: week
+series:
+  - entity: sensor.ha_fitness_personal_weekly_volume_history
+    name: Push
+    type: column
+    data_generator: |
+      return entity.attributes.weeks.map((week) => {
+        return [new Date(week.week_start).getTime(), week.push_volume];
+      });
+  - entity: sensor.ha_fitness_personal_weekly_volume_history
+    name: Pull
+    type: column
+    data_generator: |
+      return entity.attributes.weeks.map((week) => {
+        return [new Date(week.week_start).getTime(), week.pull_volume];
+      });
+  - entity: sensor.ha_fitness_personal_weekly_volume_history
+    name: Legs
+    type: column
+    data_generator: |
+      return entity.attributes.weeks.map((week) => {
+        return [new Date(week.week_start).getTime(), week.legs_volume];
+      });
+  - entity: sensor.ha_fitness_personal_weekly_volume_history
+    name: Core
+    type: column
+    data_generator: |
+      return entity.attributes.weeks.map((week) => {
+        return [new Date(week.week_start).getTime(), week.core_volume];
+      });
+```
+
+## Mushroom Summary (Optional)
+
+```yaml
+type: markdown
+title: Wochenstatus
+content: >-
+  {% set hist = state_attr('sensor.ha_fitness_personal_weekly_volume_history', 'weeks') or [] %}
+  {% set cur = hist[-1] if hist else {} %}
+  {% set top_ex = cur.get('top_exercise_name') %}
+  {% set top_mg = cur.get('top_muscle_group_name') %}
+  Gesamt (kategorisiert): **{{ (cur.get('categorized_volume_total', 0) | float(0)) | round(1) }} kg**  
+  Top Uebung: **{{ top_ex or 'n/a' }}**  
+  Top Muskelgruppe: **{{ top_mg or 'n/a' }}**  
+  Push/Pull/Legs: **{{ (cur.get('push_percent', 0) | float(0)) | round(0) }}% / {{ (cur.get('pull_percent', 0) | float(0)) | round(0) }}% / {{ (cur.get('legs_percent', 0) | float(0)) | round(0) }}%**
+```
