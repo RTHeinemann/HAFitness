@@ -198,4 +198,9 @@ Recommended dashboard action style for accurate attribution:
 - `ha_fitness.save_current_set`
 - `ha_fitness.finish_workout`
 
+Workout start/finish now use a backend two-step confirmation by default (10s timeout):
+- first call asks for confirmation (`start_confirm` / `finish_confirm`)
+- second call within timeout executes the action
+- optional service field `force: true` bypasses confirmation (useful for automations)
+
 > The integration does not parse or modify `/config/.storage/auth` and does not write to Home Assistant recorder tables.

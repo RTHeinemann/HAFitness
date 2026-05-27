@@ -12,6 +12,7 @@ from zoneinfo import ZoneInfo
 
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers.event import async_call_later
 
 from .const import EXERCISE_IDS, LEGACY_USER_ID, STATE_ACTIVE, STATE_READY
 from .storage import HAFitnessStore
@@ -39,6 +40,10 @@ _LEGS_MUSCLE_GROUP_IDS = {
     "abductors",
 }
 _CORE_MUSCLE_GROUP_IDS = {"core", "abs", "obliques"}
+_CONFIRM_ACTION_START = "start_workout"
+_CONFIRM_ACTION_FINISH = "finish_workout"
+_STATE_START_CONFIRM = "start_confirm"
+_STATE_FINISH_CONFIRM = "finish_confirm"
 
 
 class HAFitnessCoordinator:
@@ -132,6 +137,10 @@ class HAFitnessCoordinator:
         }
         self._exercise_statistics: list[dict[str, Any]] = []
         self._listeners: list[Callable[[], None]] = []
+        self._pending_confirmation_action: str | None = None
+        self._pending_confirmation_expires_at: datetime | None = None
+        self._confirmation_timeout_seconds: int = 10
+        self._pending_confirmation_unsub: Callable[[], None] | None = None
 
     # ------------------------------------------------------------------
     # Properties
@@ -147,7 +156,32 @@ class HAFitnessCoordinator:
 
     @property
     def workout_state(self) -> str:
+        self._expire_confirmation_if_needed(notify=False)
+        if self._pending_confirmation_action == _CONFIRM_ACTION_START:
+            return _STATE_START_CONFIRM
+        if self._pending_confirmation_action == _CONFIRM_ACTION_FINISH:
+            return _STATE_FINISH_CONFIRM
         return self._workout_state
+
+    @property
+    def is_workout_active(self) -> bool:
+        return self._workout_state == STATE_ACTIVE
+
+    @property
+    def pending_confirmation_action(self) -> str | None:
+        self._expire_confirmation_if_needed(notify=False)
+        return self._pending_confirmation_action
+
+    @property
+    def pending_confirmation_expires_at(self) -> str | None:
+        self._expire_confirmation_if_needed(notify=False)
+        if self._pending_confirmation_expires_at is None:
+            return None
+        return self._pending_confirmation_expires_at.isoformat()
+
+    @property
+    def confirmation_seconds_remaining(self) -> int:
+        return self._confirmation_seconds_remaining()
 
     @property
     def active_exercise(self) -> str | None:
@@ -480,6 +514,77 @@ class HAFitnessCoordinator:
     def _notify_listeners(self) -> None:
         for listener in list(self._listeners):
             listener()
+
+    def _set_pending_confirmation(self, action: str) -> None:
+        """Set pending two-step confirmation action and schedule expiration."""
+        if action not in {_CONFIRM_ACTION_START, _CONFIRM_ACTION_FINISH}:
+            raise ValueError(f"Invalid confirmation action: {action}")
+
+        self._clear_pending_confirmation(notify=False)
+        self._pending_confirmation_action = action
+        self._pending_confirmation_expires_at = _now_utc() + timedelta(
+            seconds=self._confirmation_timeout_seconds
+        )
+        self._pending_confirmation_unsub = async_call_later(
+            self.hass,
+            self._confirmation_timeout_seconds,
+            self._handle_confirmation_timeout,
+        )
+
+    def _clear_pending_confirmation(self, notify: bool = False) -> bool:
+        """Clear pending confirmation state and cancel timeout callback."""
+        changed = (
+            self._pending_confirmation_action is not None
+            or self._pending_confirmation_expires_at is not None
+            or self._pending_confirmation_unsub is not None
+        )
+        if self._pending_confirmation_unsub is not None:
+            self._pending_confirmation_unsub()
+            self._pending_confirmation_unsub = None
+        self._pending_confirmation_action = None
+        self._pending_confirmation_expires_at = None
+        if changed and notify:
+            self._notify_listeners()
+        return changed
+
+    def _expire_confirmation_if_needed(self, notify: bool = False) -> bool:
+        """Expire pending confirmation when timeout has elapsed."""
+        if (
+            self._pending_confirmation_action is None
+            or self._pending_confirmation_expires_at is None
+        ):
+            return False
+        if _now_utc() < self._pending_confirmation_expires_at:
+            return False
+        expired_action = self._pending_confirmation_action
+        self._clear_pending_confirmation(notify=notify)
+        _LOGGER.debug("HAGym: confirmation expired for action %s", expired_action)
+        return True
+
+    def _is_pending_confirmation(self, action: str) -> bool:
+        """Return True if action is the currently active pending confirmation."""
+        self._expire_confirmation_if_needed(notify=False)
+        return self._pending_confirmation_action == action
+
+    def _confirmation_seconds_remaining(self) -> int:
+        """Return seconds remaining for the current pending confirmation."""
+        self._expire_confirmation_if_needed(notify=False)
+        if self._pending_confirmation_expires_at is None:
+            return 0
+        remaining = (self._pending_confirmation_expires_at - _now_utc()).total_seconds()
+        return max(0, int(remaining))
+
+    @callback
+    def _handle_confirmation_timeout(self, _now: datetime) -> None:
+        """Scheduled callback to expire pending confirmation."""
+        self._pending_confirmation_unsub = None
+        if self._expire_confirmation_if_needed(notify=False):
+            _LOGGER.debug("HAGym: confirmation expired")
+            self._notify_listeners()
+
+    async def async_shutdown(self) -> None:
+        """Release coordinator resources on config-entry unload."""
+        self._clear_pending_confirmation(notify=False)
 
     # ------------------------------------------------------------------
     # Setters (called by entities)
@@ -1957,6 +2062,7 @@ class HAFitnessCoordinator:
                 self._current_workout_user_id = None
                 self._workout_state = STATE_READY
                 self._current_set_number = 0
+            self._clear_pending_confirmation(notify=False)
 
             await self.async_refresh_statistics(notify=False)
         except sqlite3.Error as err:
@@ -2257,18 +2363,33 @@ class HAFitnessCoordinator:
     # Workout lifecycle
     # ------------------------------------------------------------------
 
-    async def start_workout(self, context_user_id: str | None = None) -> None:
+    async def start_workout(
+        self, context_user_id: str | None = None, force: bool = False
+    ) -> None:
         """Transition workout state to active."""
         user_id = await self.resolve_user_id(context_user_id)
+        self._expire_confirmation_if_needed(notify=False)
 
         if (
             self._workout_state == STATE_ACTIVE
             and self._current_workout_id is not None
             and self._current_workout_user_id == user_id
         ):
+            self._clear_pending_confirmation(notify=False)
             _LOGGER.debug("HAGym: start_workout ignored (already active for %s)", user_id)
             return
 
+        if not force and not self._is_pending_confirmation(_CONFIRM_ACTION_START):
+            self._set_pending_confirmation(_CONFIRM_ACTION_START)
+            _LOGGER.debug(
+                "HAGym: start workout confirmation pending for user %s (%ss timeout)",
+                user_id,
+                self._confirmation_timeout_seconds,
+            )
+            self._notify_listeners()
+            return
+
+        self._clear_pending_confirmation(notify=False)
         started_at = _now_utc()
         try:
             existing_open = await self._store.async_get_current_open_workout(user_id)
@@ -2295,20 +2416,46 @@ class HAFitnessCoordinator:
         await self.async_refresh_statistics(notify=False)
         self._notify_listeners()
 
-    async def finish_workout(self, context_user_id: str | None = None) -> None:
+    async def finish_workout(
+        self, context_user_id: str | None = None, force: bool = False
+    ) -> None:
         """Transition workout state to ready for the resolved user."""
         user_id = await self.resolve_user_id(context_user_id)
+        self._expire_confirmation_if_needed(notify=False)
+
+        workout_is_active_for_user = (
+            self._workout_state == STATE_ACTIVE
+            and self._current_workout_id is not None
+            and self._current_workout_user_id == user_id
+        )
+        open_workout = (
+            await self._store.async_get_current_open_workout(user_id)
+            if not workout_is_active_for_user
+            else None
+        )
+
+        if not workout_is_active_for_user and open_workout is None:
+            self._clear_pending_confirmation(notify=False)
+            _LOGGER.debug("HAGym: finish_workout ignored (no active workout for %s)", user_id)
+            return
+
+        if not force and not self._is_pending_confirmation(_CONFIRM_ACTION_FINISH):
+            self._set_pending_confirmation(_CONFIRM_ACTION_FINISH)
+            _LOGGER.debug(
+                "HAGym: finish workout confirmation pending for user %s (%ss timeout)",
+                user_id,
+                self._confirmation_timeout_seconds,
+            )
+            self._notify_listeners()
+            return
+
+        self._clear_pending_confirmation(notify=False)
 
         try:
             workout_id_to_finish: int | None = None
-            if (
-                self._workout_state == STATE_ACTIVE
-                and self._current_workout_id is not None
-                and self._current_workout_user_id == user_id
-            ):
+            if workout_is_active_for_user:
                 workout_id_to_finish = self._current_workout_id
             else:
-                open_workout = await self._store.async_get_current_open_workout(user_id)
                 if open_workout is not None:
                     workout_id_to_finish = int(open_workout["id"])
 

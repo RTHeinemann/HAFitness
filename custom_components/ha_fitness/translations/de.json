@@ -468,7 +468,9 @@
         "name": "Status",
         "state": {
           "ready": "Bereit",
-          "active": "Aktiv"
+          "active": "Aktiv",
+          "start_confirm": "Training starten?",
+          "finish_confirm": "Training beenden?"
         }
       },
       "active_exercise_sensor": {
@@ -769,11 +771,23 @@
   "services": {
     "start_workout": {
       "name": "Training starten",
-      "description": "Markiert den Beginn einer Trainingseinheit."
+      "description": "Startet ein Training mit Zwei-Schritt-Bestätigung (standardmäßig) im Kontext des aufrufenden Home-Assistant-Benutzers.",
+      "fields": {
+        "force": {
+          "name": "Sofort ausführen",
+          "description": "Wenn true, wird das Training sofort ohne Bestätigung gestartet."
+        }
+      }
     },
     "finish_workout": {
       "name": "Training beenden",
-      "description": "Markiert das Ende einer Trainingseinheit."
+      "description": "Beendet ein Training mit Zwei-Schritt-Bestätigung (standardmäßig) im Kontext des aufrufenden Home-Assistant-Benutzers.",
+      "fields": {
+        "force": {
+          "name": "Sofort ausführen",
+          "description": "Wenn true, wird das Training sofort ohne Bestätigung beendet."
+        }
+      }
     },
     "save_set": {
       "name": "Satz speichern",

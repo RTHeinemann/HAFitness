@@ -1,10 +1,26 @@
 start_workout:
   name: Start Workout
-  description: Marks the start of a workout session for the calling Home Assistant user context when available.
+  description: Starts a workout session with two-step confirmation by default for the calling Home Assistant user context when available.
+  fields:
+    force:
+      name: Force
+      description: If true, start the workout immediately and bypass confirmation.
+      required: false
+      default: false
+      selector:
+        boolean:
 
 finish_workout:
   name: Finish Workout
-  description: Marks the end of a workout session for the calling Home Assistant user context when available.
+  description: Finishes a workout session with two-step confirmation by default for the calling Home Assistant user context when available.
+  fields:
+    force:
+      name: Force
+      description: If true, finish the workout immediately and bypass confirmation.
+      required: false
+      default: false
+      selector:
+        boolean:
 
 save_set:
   name: Save Set

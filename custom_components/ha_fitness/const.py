@@ -69,6 +69,7 @@ ATTR_ENDED_AT = "ended_at"
 ATTR_STATUS = "status"
 ATTR_CREATED_AT = "created_at"
 ATTR_DELETE_SETS = "delete_sets"
+ATTR_FORCE = "force"
 
 # Stable default exercise IDs (also used by existing per-exercise sensors)
 EXERCISE_IDS: list[str] = [

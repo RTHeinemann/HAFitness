@@ -45,6 +45,20 @@ class _HAFitnessButtonBase(ButtonEntity):
             entry_type="service",
         )
 
+    async def async_added_to_hass(self) -> None:
+        """Subscribe to coordinator updates."""
+        self.async_on_remove(
+            self._coordinator.async_add_listener(self._handle_coordinator_update)
+        )
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        self.async_write_ha_state()
+
+    def _localize(self, de_text: str, en_text: str) -> str:
+        language = str(self._coordinator.hass.config.language or "en").lower()
+        return de_text if language.startswith("de") else en_text
+
 
 class HAFitnessStartWorkoutButton(_HAFitnessButtonBase):
     """Button to start a workout."""
@@ -56,6 +70,19 @@ class HAFitnessStartWorkoutButton(_HAFitnessButtonBase):
     ) -> None:
         super().__init__(coordinator, entry)
         self._attr_unique_id = f"{entry.entry_id}_start_workout"
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        pending = self._coordinator.pending_confirmation_action == "start_workout"
+        return {
+            "confirmation_required": True,
+            "confirmation_pending": pending,
+            "next_press_action": "confirm_start" if pending else "start_workout",
+            "display_label": self._localize(
+                "Start bestätigen" if pending else "Training starten",
+                "Confirm start" if pending else "Start workout",
+            ),
+        }
 
     async def async_press(self) -> None:
         await self._coordinator.start_workout(context_user_id=self._context.user_id)
@@ -71,6 +98,19 @@ class HAFitnessFinishWorkoutButton(_HAFitnessButtonBase):
     ) -> None:
         super().__init__(coordinator, entry)
         self._attr_unique_id = f"{entry.entry_id}_finish_workout"
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        pending = self._coordinator.pending_confirmation_action == "finish_workout"
+        return {
+            "confirmation_required": True,
+            "confirmation_pending": pending,
+            "next_press_action": "confirm_finish" if pending else "finish_workout",
+            "display_label": self._localize(
+                "Ende bestätigen" if pending else "Training beenden",
+                "Confirm finish" if pending else "Finish workout",
+            ),
+        }
 
     async def async_press(self) -> None:
         await self._coordinator.finish_workout(context_user_id=self._context.user_id)

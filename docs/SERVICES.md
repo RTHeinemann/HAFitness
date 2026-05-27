@@ -2,6 +2,21 @@
 
 This document highlights workout-management services added in v1.
 
+## Live Workout Actions
+
+- `ha_fitness.start_workout`
+  - optional: `force` (default `false`)
+  - behavior:
+    - first call sets confirmation state (`start_confirm`)
+    - second call within 10 seconds starts workout
+    - `force: true` starts immediately
+- `ha_fitness.finish_workout`
+  - optional: `force` (default `false`)
+  - behavior:
+    - first call sets confirmation state (`finish_confirm`)
+    - second call within 10 seconds finishes workout
+    - `force: true` finishes immediately
+
 ## Workout CRUD
 
 - `ha_fitness.create_workout`

@@ -10,7 +10,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN, LEGACY_USER_ID, STATE_ACTIVE
+from .const import DOMAIN, LEGACY_USER_ID
 from .coordinator import HAFitnessCoordinator
 
 
@@ -124,6 +124,14 @@ class HAFitnessStatusSensor(_HAFitnessSensorBase):
     def native_value(self) -> str:
         return self._coordinator.workout_state
 
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return {
+            "confirmation_action": self._coordinator.pending_confirmation_action,
+            "confirmation_expires_at": self._coordinator.pending_confirmation_expires_at,
+            "confirmation_seconds_remaining": self._coordinator.confirmation_seconds_remaining,
+        }
+
 
 class HAFitnessCurrentUserIdSensor(_HAFitnessSensorBase):
     """Sensor for the currently resolved user id."""
@@ -219,7 +227,7 @@ class HAFitnessActiveWorkoutSummarySensor(_HAFitnessSensorBase):
     @property
     def native_value(self) -> str:
         coord = self._coordinator
-        if coord.workout_state != STATE_ACTIVE:
+        if not coord.is_workout_active:
             return "inactive"
         return coord.active_exercise_display or "active"
 
@@ -245,6 +253,9 @@ class HAFitnessActiveWorkoutSummarySensor(_HAFitnessSensorBase):
             "total_volume": coord.total_volume,
             "total_sets": coord.total_sets,
             "total_workouts": coord.total_workouts,
+            "confirmation_action": coord.pending_confirmation_action,
+            "confirmation_expires_at": coord.pending_confirmation_expires_at,
+            "confirmation_seconds_remaining": coord.confirmation_seconds_remaining,
         }
 
 

@@ -468,7 +468,9 @@
         "name": "Status",
         "state": {
           "ready": "Ready",
-          "active": "Active"
+          "active": "Active",
+          "start_confirm": "Start workout?",
+          "finish_confirm": "Finish workout?"
         }
       },
       "active_exercise_sensor": {
@@ -769,11 +771,23 @@
   "services": {
     "start_workout": {
       "name": "Start Workout",
-      "description": "Marks the start of a workout session."
+      "description": "Starts a workout with two-step confirmation by default in the calling Home Assistant user context.",
+      "fields": {
+        "force": {
+          "name": "Force",
+          "description": "If true, start the workout immediately and bypass confirmation."
+        }
+      }
     },
     "finish_workout": {
       "name": "Finish Workout",
-      "description": "Marks the end of a workout session."
+      "description": "Finishes a workout with two-step confirmation by default in the calling Home Assistant user context.",
+      "fields": {
+        "force": {
+          "name": "Force",
+          "description": "If true, finish the workout immediately and bypass confirmation."
+        }
+      }
     },
     "save_set": {
       "name": "Save Set",

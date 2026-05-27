@@ -37,6 +37,7 @@ from .const import (
     ATTR_ICON,
     ATTR_CREATED_AT,
     ATTR_DELETE_SETS,
+    ATTR_FORCE,
     ATTR_ENDED_AT,
     CONF_DISPLAY_NAME,
     CONF_INCLUDED_USER_IDS,
@@ -109,6 +110,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
+    coordinator: HAFitnessCoordinator | None = hass.data.get(DOMAIN, {}).get(entry.entry_id)
+    if coordinator is not None:
+        await coordinator.async_shutdown()
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
         domain_entries = hass.data.get(DOMAIN)
@@ -160,12 +164,20 @@ def _register_services(hass: HomeAssistant) -> None:
         return list(hass.data.get(DOMAIN, {}).values())
 
     async def handle_start_workout(call: ServiceCall) -> None:
+        force = bool(call.data.get(ATTR_FORCE, False))
         for coordinator in _all_coordinators():
-            await coordinator.start_workout(context_user_id=call.context.user_id)
+            await coordinator.start_workout(
+                context_user_id=call.context.user_id,
+                force=force,
+            )
 
     async def handle_finish_workout(call: ServiceCall) -> None:
+        force = bool(call.data.get(ATTR_FORCE, False))
         for coordinator in _all_coordinators():
-            await coordinator.finish_workout(context_user_id=call.context.user_id)
+            await coordinator.finish_workout(
+                context_user_id=call.context.user_id,
+                force=force,
+            )
 
     async def handle_save_set(call: ServiceCall) -> None:
         exercise: str = call.data[ATTR_EXERCISE]
@@ -562,8 +574,18 @@ def _register_services(hass: HomeAssistant) -> None:
             except ValueError as err:
                 raise HomeAssistantError(str(err)) from err
 
-    hass.services.async_register(DOMAIN, SERVICE_START_WORKOUT, handle_start_workout)
-    hass.services.async_register(DOMAIN, SERVICE_FINISH_WORKOUT, handle_finish_workout)
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_START_WORKOUT,
+        handle_start_workout,
+        schema=vol.Schema({vol.Optional(ATTR_FORCE): cv.boolean}),
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_FINISH_WORKOUT,
+        handle_finish_workout,
+        schema=vol.Schema({vol.Optional(ATTR_FORCE): cv.boolean}),
+    )
     hass.services.async_register(
         DOMAIN,
         SERVICE_SAVE_SET,

@@ -31,7 +31,7 @@ After setup, Home Assistant will create:
 
 | Entity | Description |
 |--------|-------------|
-| `sensor.ha_fitness_status` | Current workout state (`ready` / `active`) |
+| `sensor.ha_fitness_status` | Current workout state (`ready` / `start_confirm` / `active` / `finish_confirm`) |
 | `sensor.ha_fitness_active_exercise` | Currently selected exercise or `none` |
 | `sensor.ha_fitness_current_set_number` | Number of sets saved in the active workout |
 | `sensor.ha_fitness_last_set` | Summary of the last saved set |
@@ -43,8 +43,8 @@ After setup, Home Assistant will create:
 | `sensor.ha_fitness_recent_sets` | Recent set list in attributes |
 | `sensor.ha_fitness_exercise_catalog` | Enabled exercise count + full catalog attributes |
 | `sensor.ha_fitness_exercise_statistics` | Exercises-with-sets count + grouped per-exercise stats |
-| `button.ha_fitness_start_workout` | Starts a workout session |
-| `button.ha_fitness_finish_workout` | Finishes a workout session |
+| `button.ha_fitness_start_workout` | Starts a workout session (two-step confirmation by default) |
+| `button.ha_fitness_finish_workout` | Finishes a workout session (two-step confirmation by default) |
 | `button.ha_fitness_save_set` | Saves the current set using active inputs |
 | `select.ha_fitness_active_exercise` | Dropdown to choose the active exercise |
 | `number.ha_fitness_weight` | Weight input (0–500 kg, step 0.5) |
@@ -55,14 +55,14 @@ After setup, Home Assistant will create:
 
 The integration supports a minimal native workout flow:
 
-1. **Start Workout** – Press `button.ha_fitness_start_workout`
+1. **Start Workout** – Press `button.ha_fitness_start_workout` twice within 10 seconds
 2. **Select Exercise** – Choose from `select.ha_fitness_active_exercise`
 3. **Enter Weight** – Set `number.ha_fitness_weight`
 4. **Enter Reps** – Set `number.ha_fitness_reps`
 5. **Optional Notes** – Fill `text.ha_fitness_notes`
 6. **Press Save Set** – Press `button.ha_fitness_save_set`
 7. **See Results** – Check `sensor.ha_fitness_last_set` and `sensor.ha_fitness_active_workout_summary`
-8. **Finish Workout** – Press `button.ha_fitness_finish_workout`
+8. **Finish Workout** – Press `button.ha_fitness_finish_workout` twice within 10 seconds
 
 ## SQLite Storage
 
@@ -78,8 +78,8 @@ Call these from **Developer Tools → Services**:
 
 | Service | Description |
 |---------|-------------|
-| `ha_fitness.start_workout` | Transitions status to `active` |
-| `ha_fitness.finish_workout` | Transitions status to `ready` |
+| `ha_fitness.start_workout` | First call sets `start_confirm`, second call within timeout starts workout. Use `force: true` to bypass confirmation. |
+| `ha_fitness.finish_workout` | First call sets `finish_confirm`, second call within timeout finishes workout. Use `force: true` to bypass confirmation. |
 | `ha_fitness.save_set` | Logs a set (exercise, weight, reps, optional notes); if inactive, creates and auto-finishes an implicit workout |
 | `ha_fitness.refresh_statistics` | Reloads cached totals/PR/recent sets from SQLite |
 | `ha_fitness.export_data` | Writes export JSON to `/config/ha_fitness/export.json` |

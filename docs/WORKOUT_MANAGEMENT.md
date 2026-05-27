@@ -42,3 +42,29 @@ Menu: `Trainings verwalten`
 - Satz bearbeiten
 - Satz löschen
 - Training löschen
+
+## Start/Finish Confirmation (v1)
+
+Live workout start/finish uses backend two-step confirmation (10 seconds):
+
+- first press/call sets status to `start_confirm` or `finish_confirm`
+- second press/call within 10 seconds executes the action
+- timeout resets automatically to `ready` (start) or `active` (finish)
+- for automations, use `force: true` in `ha_fitness.start_workout` / `ha_fitness.finish_workout`
+
+Status attributes for dashboards:
+
+- `confirmation_action`
+- `confirmation_expires_at`
+- `confirmation_seconds_remaining`
+
+Example conditional label (template chip/card):
+
+```jinja2
+{% set action = state_attr('sensor.ha_fitness_status', 'confirmation_action') %}
+{% if action == 'start_workout' %}
+Start bestätigen
+{% else %}
+Training starten
+{% endif %}
+```
