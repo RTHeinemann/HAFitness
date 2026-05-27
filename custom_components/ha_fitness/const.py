@@ -44,6 +44,7 @@ SERVICE_DELETE_WORKOUT = "delete_workout"
 SERVICE_ADD_SET_TO_WORKOUT = "add_set_to_workout"
 SERVICE_UPDATE_SET = "update_set"
 SERVICE_DELETE_SET = "delete_set"
+SERVICE_SAVE_ACTIVITY = "save_activity"
 
 # Service field names
 ATTR_EXERCISE = "exercise"
@@ -72,8 +73,44 @@ ATTR_STARTED_AT = "started_at"
 ATTR_ENDED_AT = "ended_at"
 ATTR_STATUS = "status"
 ATTR_CREATED_AT = "created_at"
+ATTR_UPDATED_AT = "updated_at"
 ATTR_DELETE_SETS = "delete_sets"
 ATTR_FORCE = "force"
+ATTR_METRIC_TYPE = "metric_type"
+ATTR_DURATION_SECONDS = "duration_seconds"
+ATTR_DISTANCE_M = "distance_m"
+ATTR_CALORIES = "calories"
+ATTR_STEPS = "steps"
+ATTR_AVG_HEART_RATE = "avg_heart_rate"
+ATTR_MAX_HEART_RATE = "max_heart_rate"
+ATTR_AVG_POWER_WATTS = "avg_power_watts"
+ATTR_MAX_POWER_WATTS = "max_power_watts"
+ATTR_AVG_SPEED_MPS = "avg_speed_mps"
+ATTR_LOAD_SCORE = "load_score"
+ATTR_INTENSITY = "intensity"
+ATTR_SOURCE = "source"
+ATTR_ADDED_WEIGHT = "added_weight"
+
+# Exercise/set metric types
+METRIC_TYPE_STRENGTH = "strength"
+METRIC_TYPE_BODYWEIGHT = "bodyweight"
+METRIC_TYPE_DURATION = "duration"
+METRIC_TYPE_DISTANCE = "distance"
+METRIC_TYPE_CARDIO = "cardio"
+METRIC_TYPE_HOLD = "hold"
+METRIC_TYPE_CUSTOM = "custom"
+
+SUPPORTED_METRIC_TYPES: list[str] = [
+    METRIC_TYPE_STRENGTH,
+    METRIC_TYPE_BODYWEIGHT,
+    METRIC_TYPE_DURATION,
+    METRIC_TYPE_DISTANCE,
+    METRIC_TYPE_CARDIO,
+    METRIC_TYPE_HOLD,
+    METRIC_TYPE_CUSTOM,
+]
+
+DEFAULT_METRIC_TYPE = METRIC_TYPE_STRENGTH
 
 # Stable default exercise IDs (also used by existing per-exercise sensors)
 EXERCISE_IDS: list[str] = [

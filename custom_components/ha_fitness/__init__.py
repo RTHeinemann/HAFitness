@@ -16,6 +16,13 @@ from homeassistant.helpers import (
 )
 
 from .const import (
+    ATTR_ADDED_WEIGHT,
+    ATTR_AVG_HEART_RATE,
+    ATTR_AVG_POWER_WATTS,
+    ATTR_AVG_SPEED_MPS,
+    ATTR_CALORIES,
+    ATTR_DISTANCE_M,
+    ATTR_DURATION_SECONDS,
     ATTR_EXERCISE,
     ATTR_EXERCISE_ID,
     ATTR_ENABLED,
@@ -27,9 +34,15 @@ from .const import (
     ATTR_NAME_DE,
     ATTR_NAME_EN,
     ATTR_NOTES,
+    ATTR_INTENSITY,
+    ATTR_MAX_HEART_RATE,
+    ATTR_MAX_POWER_WATTS,
+    ATTR_METRIC_TYPE,
     ATTR_ROLE,
     ATTR_REPS,
     ATTR_SORT_ORDER,
+    ATTR_SOURCE,
+    ATTR_STEPS,
     ATTR_USER_ID,
     ATTR_WEIGHT,
     ATTR_WEIGHT_FACTOR,
@@ -71,6 +84,8 @@ from .const import (
     SERVICE_UPDATE_SET,
     SERVICE_UPDATE_MUSCLE_GROUP,
     SERVICE_UPDATE_WORKOUT,
+    SERVICE_SAVE_ACTIVITY,
+    SUPPORTED_METRIC_TYPES,
 )
 from .coordinator import HAFitnessCoordinator
 from .storage import HAFitnessStore
@@ -156,6 +171,7 @@ def _register_services(hass: HomeAssistant) -> None:
         SERVICE_ADD_SET_TO_WORKOUT,
         SERVICE_UPDATE_SET,
         SERVICE_DELETE_SET,
+        SERVICE_SAVE_ACTIVITY,
     )
     if all(hass.services.has_service(DOMAIN, service) for service in required_services):
         return
@@ -248,6 +264,7 @@ def _register_services(hass: HomeAssistant) -> None:
         muscle_group: str | None = _optional_str(call.data.get(ATTR_MUSCLE_GROUP))
         equipment: str | None = _optional_str(call.data.get(ATTR_EQUIPMENT))
         equipment_id: str | None = _optional_str(call.data.get(ATTR_EQUIPMENT_ID))
+        metric_type: str | None = _optional_str(call.data.get(ATTR_METRIC_TYPE))
         enabled: bool = bool(call.data.get(ATTR_ENABLED, True))
         sort_order: int = int(call.data.get(ATTR_SORT_ORDER, 0))
 
@@ -255,6 +272,10 @@ def _register_services(hass: HomeAssistant) -> None:
             raise HomeAssistantError("exercise_id must not be empty.")
         if not name_en:
             raise HomeAssistantError("name_en must not be empty.")
+        if metric_type is not None and metric_type.lower() not in SUPPORTED_METRIC_TYPES:
+            raise HomeAssistantError(
+                f"Unsupported metric_type '{metric_type}'. Supported values: {', '.join(SUPPORTED_METRIC_TYPES)}"
+            )
 
         for coordinator in _all_coordinators():
             await coordinator.async_add_exercise(
@@ -264,6 +285,7 @@ def _register_services(hass: HomeAssistant) -> None:
                 muscle_group=muscle_group,
                 equipment=equipment,
                 equipment_id=equipment_id,
+                metric_type=metric_type.lower() if metric_type else None,
                 enabled=enabled,
                 sort_order=sort_order,
             )
@@ -283,6 +305,8 @@ def _register_services(hass: HomeAssistant) -> None:
         equipment = raw_equipment.strip() if isinstance(raw_equipment, str) else None
         raw_equipment_id = call.data.get(ATTR_EQUIPMENT_ID)
         equipment_id = raw_equipment_id.strip() if isinstance(raw_equipment_id, str) else None
+        raw_metric_type = call.data.get(ATTR_METRIC_TYPE)
+        metric_type = raw_metric_type.strip().lower() if isinstance(raw_metric_type, str) else None
         enabled = call.data.get(ATTR_ENABLED)
         sort_order = call.data.get(ATTR_SORT_ORDER)
 
@@ -292,10 +316,15 @@ def _register_services(hass: HomeAssistant) -> None:
             and muscle_group is None
             and equipment is None
             and equipment_id is None
+            and metric_type is None
             and enabled is None
             and sort_order is None
         ):
             raise HomeAssistantError("No update fields provided for update_exercise.")
+        if metric_type is not None and metric_type not in SUPPORTED_METRIC_TYPES:
+            raise HomeAssistantError(
+                f"Unsupported metric_type '{metric_type}'. Supported values: {', '.join(SUPPORTED_METRIC_TYPES)}"
+            )
 
         for coordinator in _all_coordinators():
             updated = await coordinator.async_update_exercise(
@@ -305,6 +334,7 @@ def _register_services(hass: HomeAssistant) -> None:
                 muscle_group=muscle_group,
                 equipment=equipment,
                 equipment_id=equipment_id,
+                metric_type=metric_type,
                 enabled=bool(enabled) if enabled is not None else None,
                 sort_order=int(sort_order) if sort_order is not None else None,
             )
@@ -527,6 +557,116 @@ def _register_services(hass: HomeAssistant) -> None:
             except ValueError as err:
                 raise HomeAssistantError(str(err)) from err
 
+    async def handle_save_activity(call: ServiceCall) -> None:
+        workout_id_raw = call.data.get(ATTR_WORKOUT_ID)
+        workout_id = int(workout_id_raw) if workout_id_raw is not None else None
+        exercise_id = str(call.data[ATTR_EXERCISE_ID]).strip().lower()
+        if not exercise_id:
+            raise HomeAssistantError("exercise_id must not be empty.")
+
+        raw_metric_type = call.data.get(ATTR_METRIC_TYPE)
+        metric_type = (
+            str(raw_metric_type).strip().lower()
+            if isinstance(raw_metric_type, str) and raw_metric_type.strip()
+            else None
+        )
+        if metric_type is not None and metric_type not in SUPPORTED_METRIC_TYPES:
+            raise HomeAssistantError(
+                f"Unsupported metric_type '{metric_type}'. Supported values: {', '.join(SUPPORTED_METRIC_TYPES)}"
+            )
+
+        user_id = _optional_str(call.data.get(ATTR_USER_ID))
+        equipment_id = _optional_str(call.data.get(ATTR_EQUIPMENT_ID))
+        notes = _optional_str(call.data.get(ATTR_NOTES))
+        intensity = _optional_str(call.data.get(ATTR_INTENSITY))
+        source = _optional_str(call.data.get(ATTR_SOURCE))
+        created_at = (
+            _parse_datetime_input(call.data[ATTR_CREATED_AT], ATTR_CREATED_AT)
+            if call.data.get(ATTR_CREATED_AT)
+            else None
+        )
+
+        duration_seconds = (
+            int(call.data[ATTR_DURATION_SECONDS])
+            if ATTR_DURATION_SECONDS in call.data
+            else None
+        )
+        reps = int(call.data[ATTR_REPS]) if ATTR_REPS in call.data else None
+        distance_m = (
+            float(call.data[ATTR_DISTANCE_M]) if ATTR_DISTANCE_M in call.data else None
+        )
+        calories = (
+            float(call.data[ATTR_CALORIES]) if ATTR_CALORIES in call.data else None
+        )
+        steps = int(call.data[ATTR_STEPS]) if ATTR_STEPS in call.data else None
+        avg_heart_rate = (
+            float(call.data[ATTR_AVG_HEART_RATE])
+            if ATTR_AVG_HEART_RATE in call.data
+            else None
+        )
+        max_heart_rate = (
+            float(call.data[ATTR_MAX_HEART_RATE])
+            if ATTR_MAX_HEART_RATE in call.data
+            else None
+        )
+        avg_power_watts = (
+            float(call.data[ATTR_AVG_POWER_WATTS])
+            if ATTR_AVG_POWER_WATTS in call.data
+            else None
+        )
+        max_power_watts = (
+            float(call.data[ATTR_MAX_POWER_WATTS])
+            if ATTR_MAX_POWER_WATTS in call.data
+            else None
+        )
+        avg_speed_mps = (
+            float(call.data[ATTR_AVG_SPEED_MPS])
+            if ATTR_AVG_SPEED_MPS in call.data
+            else None
+        )
+        added_weight = (
+            float(call.data[ATTR_ADDED_WEIGHT]) if ATTR_ADDED_WEIGHT in call.data else None
+        )
+
+        if duration_seconds is not None and duration_seconds <= 0:
+            raise HomeAssistantError("duration_seconds must be > 0.")
+        if reps is not None and reps < 1:
+            raise HomeAssistantError("reps must be >= 1.")
+        if distance_m is not None and distance_m <= 0:
+            raise HomeAssistantError("distance_m must be > 0.")
+        if calories is not None and calories < 0:
+            raise HomeAssistantError("calories must be >= 0.")
+        if steps is not None and steps < 0:
+            raise HomeAssistantError("steps must be >= 0.")
+
+        for coordinator in _all_coordinators():
+            try:
+                await coordinator.async_save_activity(
+                    exercise_id=exercise_id,
+                    metric_type=metric_type,
+                    user_id=user_id,
+                    workout_id=workout_id,
+                    equipment_id=equipment_id,
+                    reps=reps,
+                    duration_seconds=duration_seconds,
+                    distance_m=distance_m,
+                    calories=calories,
+                    steps=steps,
+                    avg_heart_rate=avg_heart_rate,
+                    max_heart_rate=max_heart_rate,
+                    avg_power_watts=avg_power_watts,
+                    max_power_watts=max_power_watts,
+                    avg_speed_mps=avg_speed_mps,
+                    intensity=intensity,
+                    source=source,
+                    notes=notes,
+                    created_at=created_at,
+                    added_weight=added_weight,
+                    context_user_id=call.context.user_id,
+                )
+            except ValueError as err:
+                raise HomeAssistantError(str(err)) from err
+
     async def handle_update_set(call: ServiceCall) -> None:
         set_id = int(call.data[ATTR_SET_ID])
         equipment_id = call.data.get(ATTR_EQUIPMENT_ID)
@@ -635,6 +775,7 @@ def _register_services(hass: HomeAssistant) -> None:
                 vol.Optional(ATTR_MUSCLE_GROUP): cv.string,
                 vol.Optional(ATTR_EQUIPMENT): cv.string,
                 vol.Optional(ATTR_EQUIPMENT_ID): cv.string,
+                vol.Optional(ATTR_METRIC_TYPE): cv.string,
                 vol.Optional(ATTR_ENABLED): cv.boolean,
                 vol.Optional(ATTR_SORT_ORDER): vol.Coerce(int),
             }
@@ -652,6 +793,7 @@ def _register_services(hass: HomeAssistant) -> None:
                 vol.Optional(ATTR_MUSCLE_GROUP): cv.string,
                 vol.Optional(ATTR_EQUIPMENT): cv.string,
                 vol.Optional(ATTR_EQUIPMENT_ID): cv.string,
+                vol.Optional(ATTR_METRIC_TYPE): cv.string,
                 vol.Optional(ATTR_ENABLED): cv.boolean,
                 vol.Optional(ATTR_SORT_ORDER): vol.Coerce(int),
             }
@@ -784,6 +926,35 @@ def _register_services(hass: HomeAssistant) -> None:
     )
     hass.services.async_register(
         DOMAIN,
+        SERVICE_SAVE_ACTIVITY,
+        handle_save_activity,
+        schema=vol.Schema(
+            {
+                vol.Optional(ATTR_USER_ID): cv.string,
+                vol.Optional(ATTR_WORKOUT_ID): vol.Coerce(int),
+                vol.Optional(ATTR_EQUIPMENT_ID): cv.string,
+                vol.Required(ATTR_EXERCISE_ID): cv.string,
+                vol.Optional(ATTR_METRIC_TYPE): cv.string,
+                vol.Optional(ATTR_REPS): vol.Coerce(int),
+                vol.Optional(ATTR_DURATION_SECONDS): vol.Coerce(int),
+                vol.Optional(ATTR_DISTANCE_M): vol.Coerce(float),
+                vol.Optional(ATTR_CALORIES): vol.Coerce(float),
+                vol.Optional(ATTR_STEPS): vol.Coerce(int),
+                vol.Optional(ATTR_AVG_HEART_RATE): vol.Coerce(float),
+                vol.Optional(ATTR_MAX_HEART_RATE): vol.Coerce(float),
+                vol.Optional(ATTR_AVG_POWER_WATTS): vol.Coerce(float),
+                vol.Optional(ATTR_MAX_POWER_WATTS): vol.Coerce(float),
+                vol.Optional(ATTR_AVG_SPEED_MPS): vol.Coerce(float),
+                vol.Optional(ATTR_ADDED_WEIGHT): vol.Coerce(float),
+                vol.Optional(ATTR_INTENSITY): cv.string,
+                vol.Optional(ATTR_SOURCE): cv.string,
+                vol.Optional(ATTR_NOTES): cv.string,
+                vol.Optional(ATTR_CREATED_AT): cv.string,
+            }
+        ),
+    )
+    hass.services.async_register(
+        DOMAIN,
         SERVICE_UPDATE_SET,
         handle_update_set,
         schema=vol.Schema(
@@ -831,6 +1002,7 @@ def _unregister_services(hass: HomeAssistant) -> None:
         SERVICE_UPDATE_WORKOUT,
         SERVICE_DELETE_WORKOUT,
         SERVICE_ADD_SET_TO_WORKOUT,
+        SERVICE_SAVE_ACTIVITY,
         SERVICE_UPDATE_SET,
         SERVICE_DELETE_SET,
     ):

@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 import sqlite3
 
 from .const import (
+    DEFAULT_METRIC_TYPE,
     DEFAULT_EQUIPMENT,
     DEFAULT_EXERCISE_MUSCLE_GROUP_MAP,
     DEFAULT_EXERCISE_EQUIPMENT_MAP,
@@ -14,7 +15,7 @@ from .const import (
     LEGACY_USER_NAME,
 )
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 
 def apply_migrations(conn: sqlite3.Connection) -> None:
@@ -53,6 +54,10 @@ def apply_migrations(conn: sqlite3.Connection) -> None:
 
     if current_version < 6:
         _apply_v6(conn)
+        current_version = 6
+
+    if current_version < 7:
+        _apply_v7(conn)
 
 
 def _apply_v1(conn: sqlite3.Connection) -> None:
@@ -505,4 +510,54 @@ def _apply_v6(conn: sqlite3.Connection) -> None:
     conn.execute(
         "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(?, ?)",
         (6, now),
+    )
+
+
+def _apply_v7(conn: sqlite3.Connection) -> None:
+    """Add metric type and optional activity fields to exercises/set logs."""
+    if not _column_exists(conn, "exercises", "metric_type"):
+        conn.execute(
+            f"ALTER TABLE exercises ADD COLUMN metric_type TEXT NOT NULL DEFAULT '{DEFAULT_METRIC_TYPE}'"
+        )
+
+    set_log_columns: list[tuple[str, str]] = [
+        ("metric_type", f"TEXT NOT NULL DEFAULT '{DEFAULT_METRIC_TYPE}'"),
+        ("duration_seconds", "INTEGER"),
+        ("distance_m", "REAL"),
+        ("calories", "REAL"),
+        ("steps", "INTEGER"),
+        ("avg_heart_rate", "REAL"),
+        ("max_heart_rate", "REAL"),
+        ("avg_power_watts", "REAL"),
+        ("max_power_watts", "REAL"),
+        ("avg_speed_mps", "REAL"),
+        ("load_score", "REAL"),
+        ("intensity", "TEXT"),
+        ("source", "TEXT"),
+        ("added_weight", "REAL"),
+    ]
+    for column_name, column_def in set_log_columns:
+        if not _column_exists(conn, "set_logs", column_name):
+            conn.execute(f"ALTER TABLE set_logs ADD COLUMN {column_name} {column_def}")
+
+    now = datetime.now(timezone.utc).isoformat()
+    conn.execute(
+        """
+        UPDATE exercises
+        SET metric_type = ?
+        WHERE metric_type IS NULL OR TRIM(metric_type) = ''
+        """,
+        (DEFAULT_METRIC_TYPE,),
+    )
+    conn.execute(
+        """
+        UPDATE set_logs
+        SET metric_type = ?
+        WHERE metric_type IS NULL OR TRIM(metric_type) = ''
+        """,
+        (DEFAULT_METRIC_TYPE,),
+    )
+    conn.execute(
+        "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(?, ?)",
+        (7, now),
     )

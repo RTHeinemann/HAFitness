@@ -13,6 +13,7 @@ Workout Management v1 adds editable workout history on top of the same `workouts
 ## Data Integrity
 
 - Set volume is always recalculated as `weight * reps`.
+- Non-strength activity entries are stored in the same `set_logs` table using `metric_type` and optional activity fields.
 - Editing or deleting workouts/sets never deletes exercises, equipment, or muscle groups.
 - Legacy rows remain intact unless explicitly edited/deleted by user action.
 

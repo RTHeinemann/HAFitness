@@ -10,16 +10,25 @@ from typing import Any
 from homeassistant.core import HomeAssistant
 
 from .const import (
+    DEFAULT_METRIC_TYPE,
     DEFAULT_EQUIPMENT,
     DEFAULT_EXERCISE_MUSCLE_GROUP_MAP,
     DEFAULT_EXERCISE_EQUIPMENT_MAP,
     DEFAULT_EXERCISES,
     DEFAULT_MUSCLE_GROUPS,
     DEFAULT_MUSCLE_ROLE_WEIGHT_FACTORS,
+    METRIC_TYPE_BODYWEIGHT,
+    METRIC_TYPE_CARDIO,
+    METRIC_TYPE_CUSTOM,
+    METRIC_TYPE_DISTANCE,
+    METRIC_TYPE_DURATION,
+    METRIC_TYPE_HOLD,
+    METRIC_TYPE_STRENGTH,
     MUSCLE_ROLE_PRIMARY,
     MUSCLE_ROLE_SECONDARY,
     MUSCLE_ROLE_STABILIZER,
     LEGACY_USER_ID,
+    SUPPORTED_METRIC_TYPES,
 )
 from .migrations import apply_migrations
 
@@ -76,6 +85,20 @@ class HAFitnessStore:
         volume: float,
         notes: str | None,
         created_at: datetime,
+        metric_type: str | None = None,
+        duration_seconds: int | None = None,
+        distance_m: float | None = None,
+        calories: float | None = None,
+        steps: int | None = None,
+        avg_heart_rate: float | None = None,
+        max_heart_rate: float | None = None,
+        avg_power_watts: float | None = None,
+        max_power_watts: float | None = None,
+        avg_speed_mps: float | None = None,
+        load_score: float | None = None,
+        intensity: str | None = None,
+        source: str | None = None,
+        added_weight: float | None = None,
     ) -> int:
         """Persist a set row and return its id."""
         return await self._hass.async_add_executor_job(
@@ -90,6 +113,20 @@ class HAFitnessStore:
             volume,
             notes,
             created_at,
+            metric_type,
+            duration_seconds,
+            distance_m,
+            calories,
+            steps,
+            avg_heart_rate,
+            max_heart_rate,
+            avg_power_watts,
+            max_power_watts,
+            avg_speed_mps,
+            load_score,
+            intensity,
+            source,
+            added_weight,
         )
 
     async def async_get_last_set(self) -> dict[str, Any] | None:
@@ -271,6 +308,7 @@ class HAFitnessStore:
         muscle_group: str | None = None,
         equipment: str | None = None,
         equipment_id: str | None = None,
+        metric_type: str | None = None,
         enabled: bool = True,
         sort_order: int = 0,
     ) -> None:
@@ -283,6 +321,7 @@ class HAFitnessStore:
             muscle_group,
             equipment,
             equipment_id,
+            metric_type,
             enabled,
             sort_order,
         )
@@ -295,6 +334,7 @@ class HAFitnessStore:
         muscle_group: str | None = None,
         equipment: str | None = None,
         equipment_id: str | None = None,
+        metric_type: str | None = None,
         enabled: bool | None = None,
         sort_order: int | None = None,
     ) -> bool:
@@ -307,8 +347,68 @@ class HAFitnessStore:
             muscle_group,
             equipment,
             equipment_id,
+            metric_type,
             enabled,
             sort_order,
+        )
+
+    async def async_get_exercise_metric_type(self, exercise_id: str) -> str:
+        """Return metric type for one exercise id."""
+        return await self._hass.async_add_executor_job(
+            self._get_exercise_metric_type, exercise_id
+        )
+
+    async def async_get_set_log(self, set_id: int) -> dict[str, Any] | None:
+        """Return one set_log row by id."""
+        return await self._hass.async_add_executor_job(self._get_set_log, set_id)
+
+    async def async_save_activity_entry(
+        self,
+        *,
+        user_id: str,
+        workout_id: int | None,
+        exercise_id: str,
+        metric_type: str,
+        reps: int | None = None,
+        duration_seconds: int | None = None,
+        distance_m: float | None = None,
+        calories: float | None = None,
+        steps: int | None = None,
+        avg_heart_rate: float | None = None,
+        max_heart_rate: float | None = None,
+        avg_power_watts: float | None = None,
+        max_power_watts: float | None = None,
+        avg_speed_mps: float | None = None,
+        intensity: str | None = None,
+        source: str | None = None,
+        notes: str | None = None,
+        created_at: datetime | None = None,
+        equipment_id: str | None = None,
+        added_weight: float | None = None,
+    ) -> int:
+        """Persist one non-strength training entry and return its id."""
+        return await self._hass.async_add_executor_job(
+            self._save_activity_entry,
+            user_id,
+            workout_id,
+            exercise_id,
+            metric_type,
+            reps,
+            duration_seconds,
+            distance_m,
+            calories,
+            steps,
+            avg_heart_rate,
+            max_heart_rate,
+            avg_power_watts,
+            max_power_watts,
+            avg_speed_mps,
+            intensity,
+            source,
+            notes,
+            created_at,
+            equipment_id,
+            added_weight,
         )
 
     async def async_disable_exercise(self, exercise_id: str) -> bool:
@@ -707,7 +807,22 @@ class HAFitnessStore:
         volume: float,
         notes: str | None,
         created_at: datetime,
+        metric_type: str | None = None,
+        duration_seconds: int | None = None,
+        distance_m: float | None = None,
+        calories: float | None = None,
+        steps: int | None = None,
+        avg_heart_rate: float | None = None,
+        max_heart_rate: float | None = None,
+        avg_power_watts: float | None = None,
+        max_power_watts: float | None = None,
+        avg_speed_mps: float | None = None,
+        load_score: float | None = None,
+        intensity: str | None = None,
+        source: str | None = None,
+        added_weight: float | None = None,
     ) -> int:
+        resolved_metric_type = _normalize_metric_type(metric_type)
         with self._connect() as conn:
             resolved_equipment_id = equipment_id
             if (resolved_equipment_id is None or str(resolved_equipment_id).strip() == "") and exercise_id:
@@ -715,9 +830,12 @@ class HAFitnessStore:
             cursor = conn.execute(
                 """
                 INSERT INTO set_logs(
-                    user_id, workout_id, exercise, exercise_id, equipment_id, weight, reps, volume, notes, created_at, updated_at
+                    user_id, workout_id, exercise, exercise_id, equipment_id, metric_type,
+                    weight, reps, volume, notes, created_at, updated_at,
+                    duration_seconds, distance_m, calories, steps, avg_heart_rate, max_heart_rate,
+                    avg_power_watts, max_power_watts, avg_speed_mps, load_score, intensity, source, added_weight
                 )
-                VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     user_id,
@@ -725,12 +843,26 @@ class HAFitnessStore:
                     exercise,
                     exercise_id,
                     resolved_equipment_id,
+                    resolved_metric_type,
                     weight,
                     reps,
                     volume,
                     notes,
                     _isoformat(created_at),
                     _isoformat(created_at),
+                    duration_seconds,
+                    distance_m,
+                    calories,
+                    steps,
+                    avg_heart_rate,
+                    max_heart_rate,
+                    avg_power_watts,
+                    max_power_watts,
+                    avg_speed_mps,
+                    load_score,
+                    intensity,
+                    source,
+                    added_weight,
                 ),
             )
             conn.commit()
@@ -740,7 +872,11 @@ class HAFitnessStore:
         with self._connect() as conn:
             row = conn.execute(
                 """
-                SELECT id, user_id, workout_id, exercise, exercise_id, equipment_id, weight, reps, volume, notes, created_at
+                SELECT
+                    id, user_id, workout_id, exercise, exercise_id, equipment_id, metric_type,
+                    weight, reps, volume, notes, created_at, updated_at,
+                    duration_seconds, distance_m, calories, steps, avg_heart_rate, max_heart_rate,
+                    avg_power_watts, max_power_watts, avg_speed_mps, load_score, intensity, source, added_weight
                 FROM set_logs
                 ORDER BY created_at DESC, id DESC
                 LIMIT 1
@@ -753,7 +889,11 @@ class HAFitnessStore:
             where_sql, where_params = self._exercise_predicate(conn, exercise_id)
             row = conn.execute(
                 f"""
-                SELECT id, user_id, workout_id, exercise, exercise_id, equipment_id, weight, reps, volume, notes, created_at
+                SELECT
+                    id, user_id, workout_id, exercise, exercise_id, equipment_id, metric_type,
+                    weight, reps, volume, notes, created_at, updated_at,
+                    duration_seconds, distance_m, calories, steps, avg_heart_rate, max_heart_rate,
+                    avg_power_watts, max_power_watts, avg_speed_mps, load_score, intensity, source, added_weight
                 FROM set_logs
                 WHERE {where_sql}
                 ORDER BY created_at DESC, id DESC
@@ -786,6 +926,141 @@ class HAFitnessStore:
                 (user_id,),
             ).fetchone()
             return _row_to_dict(row)
+
+    def _save_activity_entry(
+        self,
+        user_id: str,
+        workout_id: int | None,
+        exercise_id: str,
+        metric_type: str,
+        reps: int | None,
+        duration_seconds: int | None,
+        distance_m: float | None,
+        calories: float | None,
+        steps: int | None,
+        avg_heart_rate: float | None,
+        max_heart_rate: float | None,
+        avg_power_watts: float | None,
+        max_power_watts: float | None,
+        avg_speed_mps: float | None,
+        intensity: str | None,
+        source: str | None,
+        notes: str | None,
+        created_at: datetime | None,
+        equipment_id: str | None,
+        added_weight: float | None,
+    ) -> int:
+        resolved_metric_type = _normalize_metric_type(metric_type)
+        if resolved_metric_type == METRIC_TYPE_STRENGTH:
+            raise ValueError(
+                "Use save_current_set or add_set_to_workout for strength sets."
+            )
+
+        with self._connect() as conn:
+            exercise_row = conn.execute(
+                "SELECT id, name_en, name_de FROM exercises WHERE id = ? LIMIT 1",
+                (exercise_id,),
+            ).fetchone()
+            if exercise_row is None:
+                raise ValueError(f"Exercise '{exercise_id}' not found")
+            exercise_display = str(
+                exercise_row["name_en"] or exercise_row["name_de"] or exercise_id
+            )
+            effective_created_at = created_at or datetime.now(timezone.utc)
+
+            resolved_duration_seconds = (
+                int(duration_seconds) if duration_seconds is not None else None
+            )
+            resolved_distance_m = float(distance_m) if distance_m is not None else None
+            resolved_calories = float(calories) if calories is not None else None
+            resolved_steps = int(steps) if steps is not None else None
+            resolved_avg_hr = float(avg_heart_rate) if avg_heart_rate is not None else None
+            resolved_max_hr = float(max_heart_rate) if max_heart_rate is not None else None
+            resolved_avg_power = (
+                float(avg_power_watts) if avg_power_watts is not None else None
+            )
+            resolved_max_power = (
+                float(max_power_watts) if max_power_watts is not None else None
+            )
+            resolved_avg_speed = (
+                float(avg_speed_mps) if avg_speed_mps is not None else None
+            )
+            resolved_added_weight = (
+                float(added_weight) if added_weight is not None else None
+            )
+
+            resolved_reps = 0
+            weight = 0.0
+            volume = 0.0
+            load_score = 0.0
+
+            if resolved_metric_type == METRIC_TYPE_BODYWEIGHT:
+                resolved_reps = int(reps) if reps is not None else 1
+                if resolved_reps < 1:
+                    raise ValueError("reps must be >= 1 for bodyweight metric type")
+                if resolved_added_weight is not None and resolved_added_weight > 0:
+                    weight = resolved_added_weight
+                    volume = resolved_added_weight * resolved_reps
+                load_score = float(resolved_reps)
+            elif resolved_metric_type in (METRIC_TYPE_DURATION, METRIC_TYPE_HOLD):
+                if resolved_duration_seconds is None or resolved_duration_seconds <= 0:
+                    raise ValueError("duration_seconds must be > 0 for this metric type")
+                load_score = float(resolved_duration_seconds) / 60.0
+            elif resolved_metric_type == METRIC_TYPE_DISTANCE:
+                if resolved_distance_m is None or resolved_distance_m <= 0:
+                    raise ValueError("distance_m must be > 0 for distance metric type")
+                if resolved_duration_seconds is not None and resolved_duration_seconds > 0:
+                    load_score = float(resolved_duration_seconds) / 60.0
+                else:
+                    load_score = float(resolved_distance_m) / 1000.0
+            elif resolved_metric_type == METRIC_TYPE_CARDIO:
+                if resolved_duration_seconds is None or resolved_duration_seconds <= 0:
+                    raise ValueError("duration_seconds must be > 0 for cardio metric type")
+                intensity_factor = _cardio_intensity_factor(intensity)
+                load_score = (float(resolved_duration_seconds) / 60.0) * intensity_factor
+            elif resolved_metric_type == METRIC_TYPE_CUSTOM:
+                load_score = 0.0
+
+            cursor = conn.execute(
+                """
+                INSERT INTO set_logs(
+                    user_id, workout_id, exercise, exercise_id, equipment_id, metric_type,
+                    weight, reps, volume, notes, created_at, updated_at,
+                    duration_seconds, distance_m, calories, steps, avg_heart_rate, max_heart_rate,
+                    avg_power_watts, max_power_watts, avg_speed_mps, load_score, intensity, source, added_weight
+                )
+                VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    user_id,
+                    workout_id,
+                    exercise_display,
+                    exercise_id,
+                    equipment_id,
+                    resolved_metric_type,
+                    weight,
+                    resolved_reps,
+                    volume,
+                    notes,
+                    _isoformat(effective_created_at),
+                    _isoformat(datetime.now(timezone.utc)),
+                    resolved_duration_seconds,
+                    resolved_distance_m,
+                    resolved_calories,
+                    resolved_steps,
+                    resolved_avg_hr,
+                    resolved_max_hr,
+                    resolved_avg_power,
+                    resolved_max_power,
+                    resolved_avg_speed,
+                    load_score,
+                    intensity,
+                    source,
+                    resolved_added_weight,
+                ),
+            )
+            conn.commit()
+            return int(cursor.lastrowid)
 
     def _get_workouts(self, user_id: str | None, limit: int, offset: int) -> list[dict[str, Any]]:
         query_limit = max(1, int(limit))
@@ -971,9 +1246,23 @@ class HAFitnessStore:
                     ex.name_en AS exercise_name_en,
                     ex.name_de AS exercise_name_de,
                     sl.exercise,
+                    sl.metric_type,
                     sl.weight,
                     sl.reps,
                     sl.volume,
+                    sl.duration_seconds,
+                    sl.distance_m,
+                    sl.calories,
+                    sl.steps,
+                    sl.avg_heart_rate,
+                    sl.max_heart_rate,
+                    sl.avg_power_watts,
+                    sl.max_power_watts,
+                    sl.avg_speed_mps,
+                    sl.load_score,
+                    sl.intensity,
+                    sl.source,
+                    sl.added_weight,
                     sl.notes,
                     sl.created_at,
                     sl.updated_at
@@ -1011,7 +1300,7 @@ class HAFitnessStore:
                 raise ValueError(f"Workout {workout_id} not found")
 
             exercise_row = conn.execute(
-                "SELECT id, name_en, name_de FROM exercises WHERE id = ?",
+                "SELECT id, name_en, name_de, metric_type FROM exercises WHERE id = ?",
                 (exercise_id,),
             ).fetchone()
             if exercise_row is None:
@@ -1026,12 +1315,14 @@ class HAFitnessStore:
             exercise_display = str(
                 exercise_row["name_en"] or exercise_row["name_de"] or exercise_id
             )
+            metric_type = _normalize_metric_type(exercise_row["metric_type"])
             cursor = conn.execute(
                 """
                 INSERT INTO set_logs(
-                    workout_id, user_id, equipment_id, exercise_id, exercise, weight, reps, volume, notes, created_at, updated_at
+                    workout_id, user_id, equipment_id, exercise_id, exercise, metric_type,
+                    weight, reps, volume, notes, created_at, updated_at
                 )
-                VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     workout_id,
@@ -1039,6 +1330,7 @@ class HAFitnessStore:
                     equipment_id,
                     exercise_id,
                     exercise_display,
+                    metric_type,
                     resolved_weight,
                     resolved_reps,
                     volume,
@@ -1069,7 +1361,11 @@ class HAFitnessStore:
         with self._connect() as conn:
             row = conn.execute(
                 """
-                SELECT id, workout_id, equipment_id, exercise_id, exercise, weight, reps, volume, notes, created_at
+                SELECT
+                    id, workout_id, equipment_id, exercise_id, exercise, metric_type,
+                    weight, reps, volume, notes, created_at, updated_at,
+                    duration_seconds, distance_m, calories, steps, avg_heart_rate, max_heart_rate,
+                    avg_power_watts, max_power_watts, avg_speed_mps, load_score, intensity, source, added_weight
                 FROM set_logs
                 WHERE id = ?
                 LIMIT 1
@@ -1083,9 +1379,10 @@ class HAFitnessStore:
             params: list[Any] = []
             resolved_exercise_id = str(row["exercise_id"] or "")
             resolved_exercise_display = str(row["exercise"] or resolved_exercise_id)
+            resolved_metric_type = _normalize_metric_type(row["metric_type"])
             if exercise_id is not None:
                 exercise_row = conn.execute(
-                    "SELECT id, name_en, name_de FROM exercises WHERE id = ?",
+                    "SELECT id, name_en, name_de, metric_type FROM exercises WHERE id = ?",
                     (exercise_id,),
                 ).fetchone()
                 if exercise_row is None:
@@ -1094,10 +1391,13 @@ class HAFitnessStore:
                 resolved_exercise_display = str(
                     exercise_row["name_en"] or exercise_row["name_de"] or resolved_exercise_id
                 )
+                resolved_metric_type = _normalize_metric_type(exercise_row["metric_type"])
                 updates.append("exercise_id = ?")
                 params.append(resolved_exercise_id)
                 updates.append("exercise = ?")
                 params.append(resolved_exercise_display)
+                updates.append("metric_type = ?")
+                params.append(resolved_metric_type)
 
             if equipment_id is not None:
                 updates.append("equipment_id = ?")
@@ -1111,7 +1411,7 @@ class HAFitnessStore:
             if reps is not None:
                 updates.append("reps = ?")
                 params.append(resolved_reps)
-            if weight is not None or reps is not None:
+            if (weight is not None or reps is not None) and resolved_metric_type == METRIC_TYPE_STRENGTH:
                 updates.append("volume = ?")
                 params.append(float(resolved_weight * resolved_reps))
 
@@ -1146,9 +1446,23 @@ class HAFitnessStore:
                     ex.name_en AS exercise_name_en,
                     ex.name_de AS exercise_name_de,
                     sl.exercise,
+                    sl.metric_type,
                     sl.weight,
                     sl.reps,
                     sl.volume,
+                    sl.duration_seconds,
+                    sl.distance_m,
+                    sl.calories,
+                    sl.steps,
+                    sl.avg_heart_rate,
+                    sl.max_heart_rate,
+                    sl.avg_power_watts,
+                    sl.max_power_watts,
+                    sl.avg_speed_mps,
+                    sl.load_score,
+                    sl.intensity,
+                    sl.source,
+                    sl.added_weight,
                     sl.notes,
                     sl.created_at,
                     sl.updated_at
@@ -1198,7 +1512,10 @@ class HAFitnessStore:
     def _get_pr_by_exercise(self, exercise_id: str, user_id: str | None) -> float:
         with self._connect() as conn:
             where_sql, where_params = self._exercise_predicate(conn, exercise_id)
-            sql = f"SELECT COALESCE(MAX(weight), 0) AS value FROM set_logs WHERE {where_sql}"
+            sql = (
+                f"SELECT COALESCE(MAX(weight), 0) AS value FROM set_logs "
+                f"WHERE {where_sql} AND COALESCE(metric_type, '{DEFAULT_METRIC_TYPE}') = '{METRIC_TYPE_STRENGTH}'"
+            )
             params: tuple[Any, ...] = where_params
             if user_id is not None:
                 sql += " AND user_id = ?"
@@ -1227,7 +1544,11 @@ class HAFitnessStore:
 
     def _get_recent_sets(self, limit: int, user_id: str | None) -> list[dict[str, Any]]:
         sql = """
-            SELECT id, user_id, workout_id, exercise, exercise_id, equipment_id, weight, reps, volume, notes, created_at
+            SELECT
+                id, user_id, workout_id, exercise, exercise_id, equipment_id, metric_type,
+                weight, reps, volume, notes, created_at, updated_at,
+                duration_seconds, distance_m, calories, steps, avg_heart_rate, max_heart_rate,
+                avg_power_watts, max_power_watts, avg_speed_mps, load_score, intensity, source, added_weight
             FROM set_logs
         """
         params: tuple[Any, ...] = ()
@@ -1285,7 +1606,7 @@ class HAFitnessStore:
 
     def _get_exercises(self, enabled_only: bool) -> list[dict[str, Any]]:
         sql = """
-            SELECT id, name_en, name_de, muscle_group, equipment, equipment_id, enabled, sort_order, created_at
+            SELECT id, name_en, name_de, muscle_group, equipment, equipment_id, metric_type, enabled, sort_order, created_at
             FROM exercises
         """
         params: tuple[Any, ...] = ()
@@ -1300,7 +1621,7 @@ class HAFitnessStore:
         with self._connect() as conn:
             row = conn.execute(
                 """
-                SELECT id, name_en, name_de, muscle_group, equipment, equipment_id, enabled, sort_order, created_at
+                SELECT id, name_en, name_de, muscle_group, equipment, equipment_id, metric_type, enabled, sort_order, created_at
                 FROM exercises
                 WHERE id = ?
                 LIMIT 1
@@ -1311,6 +1632,33 @@ class HAFitnessStore:
                 return None
             return _row_to_dict(row)
 
+    def _get_exercise_metric_type(self, exercise_id: str) -> str:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT metric_type FROM exercises WHERE id = ? LIMIT 1",
+                (exercise_id,),
+            ).fetchone()
+            if row is None:
+                raise ValueError(f"Exercise '{exercise_id}' not found")
+            return _normalize_metric_type(row["metric_type"])
+
+    def _get_set_log(self, set_id: int) -> dict[str, Any] | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT
+                    id, user_id, workout_id, exercise, exercise_id, equipment_id, metric_type,
+                    weight, reps, volume, notes, created_at, updated_at,
+                    duration_seconds, distance_m, calories, steps, avg_heart_rate, max_heart_rate,
+                    avg_power_watts, max_power_watts, avg_speed_mps, load_score, intensity, source, added_weight
+                FROM set_logs
+                WHERE id = ?
+                LIMIT 1
+                """,
+                (int(set_id),),
+            ).fetchone()
+            return _row_to_dict(row)
+
     def _add_exercise(
         self,
         exercise_id: str,
@@ -1319,22 +1667,25 @@ class HAFitnessStore:
         muscle_group: str | None,
         equipment: str | None,
         equipment_id: str | None,
+        metric_type: str | None,
         enabled: bool,
         sort_order: int,
     ) -> None:
+        resolved_metric_type = _normalize_metric_type(metric_type)
         with self._connect() as conn:
             conn.execute(
                 """
                 INSERT INTO exercises(
-                    id, name_en, name_de, muscle_group, equipment, equipment_id, enabled, sort_order, created_at
+                    id, name_en, name_de, muscle_group, equipment, equipment_id, metric_type, enabled, sort_order, created_at
                 )
-                VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     name_en = excluded.name_en,
                     name_de = excluded.name_de,
                     muscle_group = excluded.muscle_group,
                     equipment = excluded.equipment,
                     equipment_id = COALESCE(excluded.equipment_id, exercises.equipment_id),
+                    metric_type = excluded.metric_type,
                     enabled = excluded.enabled,
                     sort_order = excluded.sort_order
                 """,
@@ -1345,6 +1696,7 @@ class HAFitnessStore:
                     muscle_group,
                     equipment,
                     equipment_id,
+                    resolved_metric_type,
                     1 if enabled else 0,
                     sort_order,
                     _isoformat(datetime.now(timezone.utc)),
@@ -1360,6 +1712,7 @@ class HAFitnessStore:
         muscle_group: str | None,
         equipment: str | None,
         equipment_id: str | None,
+        metric_type: str | None,
         enabled: bool | None,
         sort_order: int | None,
     ) -> bool:
@@ -1380,6 +1733,9 @@ class HAFitnessStore:
         if equipment_id is not None:
             updates.append("equipment_id = ?")
             params.append(equipment_id)
+        if metric_type is not None:
+            updates.append("metric_type = ?")
+            params.append(_normalize_metric_type(metric_type))
         if enabled is not None:
             updates.append("enabled = ?")
             params.append(1 if enabled else 0)
@@ -1411,15 +1767,16 @@ class HAFitnessStore:
                 conn.execute(
                     """
                     INSERT INTO exercises(
-                        id, name_en, name_de, muscle_group, equipment, equipment_id, enabled, sort_order, created_at
+                        id, name_en, name_de, muscle_group, equipment, equipment_id, metric_type, enabled, sort_order, created_at
                     )
-                    VALUES(?, ?, ?, ?, ?, ?, 1, ?, ?)
+                    VALUES(?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
                     ON CONFLICT(id) DO UPDATE SET
                         name_en = excluded.name_en,
                         name_de = excluded.name_de,
                         muscle_group = excluded.muscle_group,
                         equipment = excluded.equipment,
                         equipment_id = COALESCE(exercises.equipment_id, excluded.equipment_id),
+                        metric_type = COALESCE(exercises.metric_type, excluded.metric_type),
                         sort_order = excluded.sort_order,
                         enabled = 1
                     """,
@@ -1430,6 +1787,7 @@ class HAFitnessStore:
                         exercise["muscle_group"],
                         exercise["equipment"],
                         DEFAULT_EXERCISE_EQUIPMENT_MAP.get(str(exercise["id"])),
+                        DEFAULT_METRIC_TYPE,
                         int(exercise["sort_order"]),
                         now,
                     ),
@@ -1571,7 +1929,7 @@ class HAFitnessStore:
         self, equipment_id: str | None, enabled_only: bool
     ) -> list[dict[str, Any]]:
         sql = """
-            SELECT id, name_en, name_de, muscle_group, equipment, equipment_id, enabled, sort_order, created_at
+            SELECT id, name_en, name_de, muscle_group, equipment, equipment_id, metric_type, enabled, sort_order, created_at
             FROM exercises
         """
         params: tuple[Any, ...] = ()
@@ -2353,7 +2711,11 @@ class HAFitnessStore:
                 return []
             sql, params = _in_clause_sql(
                 """
-                SELECT id, user_id, workout_id, exercise, exercise_id, equipment_id, weight, reps, volume, notes, created_at
+                SELECT
+                    id, user_id, workout_id, exercise, exercise_id, equipment_id, metric_type,
+                    weight, reps, volume, notes, created_at, updated_at,
+                    duration_seconds, distance_m, calories, steps, avg_heart_rate, max_heart_rate,
+                    avg_power_watts, max_power_watts, avg_speed_mps, load_score, intensity, source, added_weight
                 FROM set_logs
                 """,
                 "user_id",
@@ -2384,7 +2746,10 @@ class HAFitnessStore:
             if resolved == []:
                 return 0.0
             where_sql, where_params = self._exercise_predicate(conn, exercise_id)
-            sql = f"SELECT COALESCE(MAX(weight), 0) AS value FROM set_logs WHERE {where_sql}"
+            sql = (
+                f"SELECT COALESCE(MAX(weight), 0) AS value FROM set_logs "
+                f"WHERE {where_sql} AND COALESCE(metric_type, '{DEFAULT_METRIC_TYPE}') = '{METRIC_TYPE_STRENGTH}'"
+            )
             sql, in_params = _in_clause_sql(sql, "user_id", resolved, initial_where=True)
             row = conn.execute(sql, (*where_params, *in_params)).fetchone()
             return float(row["value"] if row is not None else 0.0)
@@ -2454,7 +2819,15 @@ class HAFitnessStore:
                 exercise_id,
                 COALESCE(SUM(volume), 0) AS total_volume,
                 COUNT(*) AS total_sets,
-                COALESCE(MAX(weight), 0) AS pr
+                COALESCE(
+                    MAX(
+                        CASE
+                            WHEN COALESCE(metric_type, 'strength') = 'strength' THEN weight
+                            ELSE NULL
+                        END
+                    ),
+                    0
+                ) AS pr
             FROM set_logs
             WHERE exercise_id IS NOT NULL
               AND TRIM(exercise_id) != ''
@@ -2905,6 +3278,26 @@ def _resolve_weight_factor(role: str, weight_factor: float) -> float:
     if resolved <= 0:
         return DEFAULT_MUSCLE_ROLE_WEIGHT_FACTORS.get(role, 1.0)
     return resolved
+
+
+def _normalize_metric_type(metric_type: Any) -> str:
+    normalized = str(metric_type or DEFAULT_METRIC_TYPE).strip().lower()
+    if normalized in SUPPORTED_METRIC_TYPES:
+        return normalized
+    return DEFAULT_METRIC_TYPE
+
+
+def _cardio_intensity_factor(intensity: str | None) -> float:
+    normalized = str(intensity or "").strip().lower()
+    if normalized == "low":
+        return 0.8
+    if normalized == "moderate":
+        return 1.0
+    if normalized == "hard":
+        return 1.4
+    if normalized == "very_hard":
+        return 1.8
+    return 1.0
 
 
 def _parse_iso_datetime(value: Any) -> datetime | None:

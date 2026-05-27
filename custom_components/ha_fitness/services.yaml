@@ -132,6 +132,20 @@ add_exercise:
       required: false
       selector:
         text:
+    metric_type:
+      name: Metric Type
+      description: Optional exercise metric type (strength, bodyweight, duration, distance, cardio, hold, custom).
+      required: false
+      selector:
+        select:
+          options:
+            - strength
+            - bodyweight
+            - duration
+            - distance
+            - cardio
+            - hold
+            - custom
     enabled:
       name: Enabled
       description: Whether the exercise appears in active exercise options.
@@ -190,6 +204,20 @@ update_exercise:
       required: false
       selector:
         text:
+    metric_type:
+      name: Metric Type
+      description: Optional new metric type.
+      required: false
+      selector:
+        select:
+          options:
+            - strength
+            - bodyweight
+            - duration
+            - distance
+            - cardio
+            - hold
+            - custom
     enabled:
       name: Enabled
       description: Optional enabled flag.
@@ -528,6 +556,171 @@ add_set_to_workout:
           max: 999
           step: 1
           mode: box
+    notes:
+      name: Notes
+      required: false
+      selector:
+        text:
+    created_at:
+      name: Created At
+      required: false
+      selector:
+        text:
+
+save_activity:
+  name: Save Activity
+  description: Saves one non-strength training entry in set_logs. If no workout is active and no workout_id is provided, an implicit completed workout is created.
+  fields:
+    user_id:
+      name: User ID
+      required: false
+      selector:
+        text:
+    workout_id:
+      name: Workout ID
+      required: false
+      selector:
+        number:
+          min: 1
+          max: 999999999
+          step: 1
+          mode: box
+    equipment_id:
+      name: Equipment ID
+      required: false
+      selector:
+        text:
+    exercise_id:
+      name: Exercise ID
+      required: true
+      selector:
+        text:
+    metric_type:
+      name: Metric Type
+      required: false
+      selector:
+        select:
+          options:
+            - bodyweight
+            - duration
+            - distance
+            - cardio
+            - hold
+            - custom
+    reps:
+      name: Reps
+      required: false
+      selector:
+        number:
+          min: 1
+          max: 9999
+          step: 1
+          mode: box
+    duration_seconds:
+      name: Duration Seconds
+      required: false
+      selector:
+        number:
+          min: 1
+          max: 86400
+          step: 1
+          mode: box
+    distance_m:
+      name: Distance Meters
+      required: false
+      selector:
+        number:
+          min: 0.01
+          max: 1000000
+          step: 0.01
+          mode: box
+    calories:
+      name: Calories
+      required: false
+      selector:
+        number:
+          min: 0
+          max: 20000
+          step: 1
+          mode: box
+    steps:
+      name: Steps
+      required: false
+      selector:
+        number:
+          min: 0
+          max: 500000
+          step: 1
+          mode: box
+    avg_heart_rate:
+      name: Avg Heart Rate
+      required: false
+      selector:
+        number:
+          min: 0
+          max: 260
+          step: 1
+          mode: box
+    max_heart_rate:
+      name: Max Heart Rate
+      required: false
+      selector:
+        number:
+          min: 0
+          max: 260
+          step: 1
+          mode: box
+    avg_power_watts:
+      name: Avg Power (W)
+      required: false
+      selector:
+        number:
+          min: 0
+          max: 3000
+          step: 1
+          mode: box
+    max_power_watts:
+      name: Max Power (W)
+      required: false
+      selector:
+        number:
+          min: 0
+          max: 3000
+          step: 1
+          mode: box
+    avg_speed_mps:
+      name: Avg Speed (m/s)
+      required: false
+      selector:
+        number:
+          min: 0
+          max: 30
+          step: 0.01
+          mode: box
+    added_weight:
+      name: Added Weight
+      required: false
+      selector:
+        number:
+          min: 0
+          max: 1000
+          step: 0.1
+          mode: box
+    intensity:
+      name: Intensity
+      required: false
+      selector:
+        select:
+          options:
+            - low
+            - moderate
+            - hard
+            - very_hard
+    source:
+      name: Source
+      required: false
+      selector:
+        text:
     notes:
       name: Notes
       required: false

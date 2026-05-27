@@ -38,6 +38,7 @@
           "name_de": "Name (German)",
           "muscle_group": "Muscle group",
           "equipment": "Equipment",
+          "metric_type": "Metric type",
           "sort_order": "Sort order",
           "enabled": "Enabled",
           "equipment_id": "Equipment ID"
@@ -113,6 +114,7 @@
           "name_de": "Name (German)",
           "muscle_group": "Muscle group",
           "equipment": "Equipment",
+          "metric_type": "Metric type",
           "sort_order": "Sort order",
           "enabled": "Enabled",
           "equipment_id": "Equipment ID"
@@ -133,6 +135,7 @@
           "name_de": "Name (German)",
           "muscle_group": "Muscle group",
           "equipment": "Equipment",
+          "metric_type": "Metric type",
           "sort_order": "Sort order",
           "enabled": "Enabled",
           "equipment_id": "Equipment ID"
@@ -437,6 +440,7 @@
       "exercise_exists": "Exercise already exists.",
       "name_required": "English name must not be empty.",
       "invalid_sort_order": "Sort order must be a whole number.",
+      "invalid_metric_type": "Invalid metric type.",
       "exercise_not_found": "Exercise not found.",
       "coordinator_unavailable": "Integration data is not ready yet. Please try again.",
       "invalid_equipment_id": "Equipment ID must contain only lowercase letters, numbers, or underscore.",
@@ -906,6 +910,48 @@
     "delete_set": {
       "name": "Delete Set",
       "description": "Deletes one set by set_id."
+    },
+    "save_activity": {
+      "name": "Save Activity",
+      "description": "Saves a non-strength activity entry (for example cardio, duration, hold) into set_logs.",
+      "fields": {
+        "exercise_id": {
+          "name": "Exercise ID",
+          "description": "Target exercise from the exercise catalog."
+        },
+        "metric_type": {
+          "name": "Metric type",
+          "description": "Activity metric type (must not be strength)."
+        },
+        "duration_seconds": {
+          "name": "Duration (seconds)",
+          "description": "Activity duration in seconds."
+        },
+        "distance_m": {
+          "name": "Distance (m)",
+          "description": "Distance in meters."
+        },
+        "calories": {
+          "name": "Calories",
+          "description": "Estimated calories."
+        },
+        "steps": {
+          "name": "Steps",
+          "description": "Step count."
+        },
+        "avg_heart_rate": {
+          "name": "Avg heart rate",
+          "description": "Average heart rate."
+        },
+        "max_heart_rate": {
+          "name": "Max heart rate",
+          "description": "Maximum heart rate."
+        },
+        "source": {
+          "name": "Source",
+          "description": "Optional source of the entry."
+        }
+      }
     }
   }
 }

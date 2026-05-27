@@ -15,12 +15,15 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.event import async_call_later
 
 from .const import (
+    DEFAULT_METRIC_TYPE,
     EXERCISE_IDS,
     IDLE_EQUIPMENT_ID,
     IDLE_EXERCISE_ID,
     LEGACY_USER_ID,
+    METRIC_TYPE_STRENGTH,
     STATE_ACTIVE,
     STATE_READY,
+    SUPPORTED_METRIC_TYPES,
 )
 from .storage import HAFitnessStore
 
@@ -1458,9 +1461,65 @@ class HAFitnessCoordinator:
                         "equipment_name": equipment_name,
                         "exercise_id": exercise_id or None,
                         "exercise_name": exercise_name,
+                        "metric_type": str(set_row.get("metric_type") or DEFAULT_METRIC_TYPE),
                         "weight": float(set_row.get("weight", 0.0)),
                         "reps": int(set_row.get("reps", 0)),
                         "volume": volume,
+                        "duration_seconds": (
+                            int(set_row["duration_seconds"])
+                            if set_row.get("duration_seconds") is not None
+                            else None
+                        ),
+                        "distance_m": (
+                            float(set_row["distance_m"])
+                            if set_row.get("distance_m") is not None
+                            else None
+                        ),
+                        "calories": (
+                            float(set_row["calories"])
+                            if set_row.get("calories") is not None
+                            else None
+                        ),
+                        "steps": (
+                            int(set_row["steps"]) if set_row.get("steps") is not None else None
+                        ),
+                        "avg_heart_rate": (
+                            float(set_row["avg_heart_rate"])
+                            if set_row.get("avg_heart_rate") is not None
+                            else None
+                        ),
+                        "max_heart_rate": (
+                            float(set_row["max_heart_rate"])
+                            if set_row.get("max_heart_rate") is not None
+                            else None
+                        ),
+                        "avg_power_watts": (
+                            float(set_row["avg_power_watts"])
+                            if set_row.get("avg_power_watts") is not None
+                            else None
+                        ),
+                        "max_power_watts": (
+                            float(set_row["max_power_watts"])
+                            if set_row.get("max_power_watts") is not None
+                            else None
+                        ),
+                        "avg_speed_mps": (
+                            float(set_row["avg_speed_mps"])
+                            if set_row.get("avg_speed_mps") is not None
+                            else None
+                        ),
+                        "load_score": (
+                            float(set_row["load_score"])
+                            if set_row.get("load_score") is not None
+                            else None
+                        ),
+                        "intensity": set_row.get("intensity"),
+                        "source": set_row.get("source"),
+                        "added_weight": (
+                            float(set_row["added_weight"])
+                            if set_row.get("added_weight") is not None
+                            else None
+                        ),
                         "notes": set_row.get("notes"),
                         "created_at": set_row.get("created_at"),
                     }
@@ -1601,6 +1660,10 @@ class HAFitnessCoordinator:
             raise HomeAssistantError(f"Unknown exercise_id: {exercise_id}")
         if int(exercise_row.get("enabled", 1)) != 1:
             raise HomeAssistantError(f"Exercise is disabled: {exercise_id}")
+        if self.exercise_metric_type(exercise_id) != METRIC_TYPE_STRENGTH:
+            raise HomeAssistantError(
+                "add_set_to_workout currently supports strength exercises only. Use save_activity for non-strength activities."
+            )
         if equipment_id:
             equipment_row = self.get_equipment(equipment_id)
             if equipment_row is None:
@@ -1678,6 +1741,7 @@ class HAFitnessCoordinator:
         muscle_group: str | None = None,
         equipment: str | None = None,
         equipment_id: str | None = None,
+        metric_type: str | None = None,
         enabled: bool = True,
         sort_order: int = 0,
     ) -> None:
@@ -1689,6 +1753,7 @@ class HAFitnessCoordinator:
             muscle_group=muscle_group,
             equipment=equipment,
             equipment_id=equipment_id,
+            metric_type=metric_type,
             enabled=enabled,
             sort_order=sort_order,
         )
@@ -1704,6 +1769,7 @@ class HAFitnessCoordinator:
         muscle_group: str | None = None,
         equipment: str | None = None,
         equipment_id: str | None = None,
+        metric_type: str | None = None,
         enabled: bool | None = None,
         sort_order: int | None = None,
     ) -> bool:
@@ -1715,6 +1781,7 @@ class HAFitnessCoordinator:
             muscle_group=muscle_group,
             equipment=equipment,
             equipment_id=equipment_id,
+            metric_type=metric_type,
             enabled=enabled,
             sort_order=sort_order,
         )
@@ -2017,6 +2084,18 @@ class HAFitnessCoordinator:
         if locale.startswith("de"):
             return str(row.get("name_de") or row.get("name_en") or exercise_id)
         return str(row.get("name_en") or row.get("name_de") or exercise_id)
+
+    def exercise_metric_type(self, exercise_id: str | None) -> str:
+        """Return one exercise metric type with safe default fallback."""
+        if not exercise_id:
+            return DEFAULT_METRIC_TYPE
+        row = self._exercise_by_id.get(exercise_id)
+        if row is None:
+            return DEFAULT_METRIC_TYPE
+        raw = str(row.get("metric_type") or DEFAULT_METRIC_TYPE).strip().lower()
+        if raw in SUPPORTED_METRIC_TYPES:
+            return raw
+        return DEFAULT_METRIC_TYPE
 
     def exercise_id_from_input(self, exercise: str) -> str | None:
         """Resolve exercise id from id or localized label/name."""
@@ -2773,6 +2852,129 @@ class HAFitnessCoordinator:
 
         self._notify_listeners()
 
+    async def async_save_activity(
+        self,
+        *,
+        exercise_id: str,
+        metric_type: str | None = None,
+        user_id: str | None = None,
+        workout_id: int | None = None,
+        equipment_id: str | None = None,
+        reps: int | None = None,
+        duration_seconds: int | None = None,
+        distance_m: float | None = None,
+        calories: float | None = None,
+        steps: int | None = None,
+        avg_heart_rate: float | None = None,
+        max_heart_rate: float | None = None,
+        avg_power_watts: float | None = None,
+        max_power_watts: float | None = None,
+        avg_speed_mps: float | None = None,
+        intensity: str | None = None,
+        source: str | None = None,
+        notes: str | None = None,
+        created_at: datetime | None = None,
+        added_weight: float | None = None,
+        context_user_id: str | None = None,
+    ) -> int:
+        """Persist one non-strength activity entry."""
+        resolved_user_id = (
+            await self.resolve_user_id(user_id)
+            if user_id is not None
+            else await self.resolve_user_id(context_user_id)
+        )
+        exercise_row = self.get_exercise(exercise_id)
+        if exercise_row is None:
+            raise HomeAssistantError(f"Unknown exercise_id: {exercise_id}")
+        if int(exercise_row.get("enabled", 1)) != 1:
+            raise HomeAssistantError(f"Exercise is disabled: {exercise_id}")
+
+        resolved_metric_type = (
+            metric_type.strip().lower() if isinstance(metric_type, str) and metric_type.strip() else None
+        )
+        if resolved_metric_type is None:
+            resolved_metric_type = self.exercise_metric_type(exercise_id)
+        if resolved_metric_type not in SUPPORTED_METRIC_TYPES:
+            raise HomeAssistantError(
+                f"Unsupported metric_type '{resolved_metric_type}'. Supported values: {', '.join(SUPPORTED_METRIC_TYPES)}"
+            )
+        if resolved_metric_type == METRIC_TYPE_STRENGTH:
+            raise HomeAssistantError(
+                "Use save_current_set or add_set_to_workout for strength sets."
+            )
+
+        resolved_workout_id = workout_id
+        if resolved_workout_id is not None:
+            workout_row = await self._store.async_get_workout(int(resolved_workout_id))
+            if workout_row is None:
+                raise HomeAssistantError(f"Workout {resolved_workout_id} not found.")
+        else:
+            if (
+                self._workout_state == STATE_ACTIVE
+                and self._current_workout_user_id == resolved_user_id
+                and self._current_workout_id is not None
+            ):
+                resolved_workout_id = self._current_workout_id
+            else:
+                open_workout = await self._store.async_get_current_open_workout(resolved_user_id)
+                if open_workout is not None:
+                    resolved_workout_id = int(open_workout["id"])
+
+        created_value = created_at or _now_utc()
+        cleanup_implicit_workout_id: int | None = None
+        if resolved_workout_id is None:
+            ended_at: datetime | None = None
+            if duration_seconds is not None and duration_seconds > 0:
+                ended_at = created_value + timedelta(seconds=int(duration_seconds))
+            implicit_workout = await self._store.async_create_workout(
+                user_id=resolved_user_id,
+                started_at=created_value,
+                ended_at=ended_at,
+                notes=notes,
+                status="completed",
+            )
+            resolved_workout_id = int(implicit_workout["id"])
+            cleanup_implicit_workout_id = resolved_workout_id
+
+        try:
+            set_id = await self._store.async_save_activity_entry(
+                user_id=resolved_user_id,
+                workout_id=resolved_workout_id,
+                exercise_id=exercise_id,
+                metric_type=resolved_metric_type,
+                equipment_id=equipment_id,
+                reps=reps,
+                duration_seconds=duration_seconds,
+                distance_m=distance_m,
+                calories=calories,
+                steps=steps,
+                avg_heart_rate=avg_heart_rate,
+                max_heart_rate=max_heart_rate,
+                avg_power_watts=avg_power_watts,
+                max_power_watts=max_power_watts,
+                avg_speed_mps=avg_speed_mps,
+                intensity=intensity,
+                source=source,
+                notes=notes,
+                created_at=created_value,
+                added_weight=added_weight,
+            )
+        except (sqlite3.Error, ValueError) as err:
+            _LOGGER.exception("HAGym: failed to save activity entry")
+            raise HomeAssistantError(str(err)) from err
+
+        if cleanup_implicit_workout_id is not None:
+            # Keep the implicit workout as completed; nothing else required.
+            _LOGGER.debug(
+                "HAGym: created implicit completed workout %s for activity entry %s",
+                cleanup_implicit_workout_id,
+                set_id,
+            )
+
+        await self.async_refresh_statistics(notify=False)
+        self._notify_listeners()
+        return set_id
+
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
@@ -2831,6 +3033,11 @@ class HAFitnessCoordinator:
                     "Please select an exercise first.",
                 )
             )
+        metric_type = self.exercise_metric_type(exercise_id)
+        if metric_type != METRIC_TYPE_STRENGTH:
+            raise HomeAssistantError(
+                "Selected exercise is not strength-based. Use save_activity for non-strength activities."
+            )
         volume = weight * reps
         created_at = _now_utc()
         resolved_equipment_id = (
@@ -2852,6 +3059,7 @@ class HAFitnessCoordinator:
                 volume=volume,
                 notes=notes,
                 created_at=created_at,
+                metric_type=metric_type,
             )
         except sqlite3.Error as err:
             _LOGGER.exception("HAGym: failed to write set to SQLite")
@@ -2870,6 +3078,7 @@ class HAFitnessCoordinator:
             "set_number": set_number,
             "exercise": exercise_display,
             "exercise_id": exercise_id,
+            "metric_type": metric_type,
             "equipment_id": resolved_equipment_id,
             "weight": weight,
             "reps": reps,

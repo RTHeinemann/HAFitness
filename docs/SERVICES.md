@@ -40,6 +40,23 @@ This document highlights workout-management services added in v1.
 - `ha_fitness.delete_set`
   - required: `set_id`
 
+## Activity Logging (Phase 1)
+
+- `ha_fitness.save_activity`
+  - required: `exercise_id`
+  - optional: `user_id`, `workout_id`, `equipment_id`, `metric_type`
+  - optional activity fields:
+    - `reps` (for bodyweight entries)
+    - `duration_seconds`, `distance_m`, `calories`, `steps`
+    - `avg_heart_rate`, `max_heart_rate`
+    - `avg_power_watts`, `max_power_watts`, `avg_speed_mps`
+    - `intensity`, `source`, `notes`, `created_at`, `added_weight`
+  - behavior:
+    - validates exercise existence and enabled state
+    - resolves metric type from exercise when omitted
+    - rejects `metric_type='strength'` and routes strength logging to set services
+    - if `workout_id` is omitted and no active workout exists, creates an implicit completed workout
+
 ## Validation
 
 - `weight >= 0`

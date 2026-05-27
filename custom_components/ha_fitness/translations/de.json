@@ -38,6 +38,7 @@
           "name_de": "Name (Deutsch)",
           "muscle_group": "Muskelgruppe",
           "equipment": "Equipment",
+          "metric_type": "Metriktyp",
           "sort_order": "Sortierreihenfolge",
           "enabled": "Aktiv",
           "equipment_id": "Equipment-ID"
@@ -113,6 +114,7 @@
           "name_de": "Name (Deutsch)",
           "muscle_group": "Muskelgruppe",
           "equipment": "Equipment",
+          "metric_type": "Metriktyp",
           "sort_order": "Sortierreihenfolge",
           "enabled": "Aktiv",
           "equipment_id": "Equipment-ID"
@@ -133,6 +135,7 @@
           "name_de": "Name (Deutsch)",
           "muscle_group": "Muskelgruppe",
           "equipment": "Equipment",
+          "metric_type": "Metriktyp",
           "sort_order": "Sortierreihenfolge",
           "enabled": "Aktiv",
           "equipment_id": "Equipment-ID"
@@ -437,6 +440,7 @@
       "exercise_exists": "Die Übung existiert bereits.",
       "name_required": "Der englische Name darf nicht leer sein.",
       "invalid_sort_order": "Die Sortierreihenfolge muss eine ganze Zahl sein.",
+      "invalid_metric_type": "Ungültiger Metriktyp.",
       "exercise_not_found": "Übung nicht gefunden.",
       "coordinator_unavailable": "Integrationsdaten sind noch nicht bereit. Bitte erneut versuchen.",
       "invalid_equipment_id": "Die Equipment-ID darf nur Kleinbuchstaben, Zahlen oder Unterstriche enthalten.",
@@ -906,6 +910,48 @@
     "delete_set": {
       "name": "Satz löschen",
       "description": "Löscht einen Satz per set_id."
+    },
+    "save_activity": {
+      "name": "Aktivität speichern",
+      "description": "Speichert einen Nicht-Kraft-Trainingseintrag (z. B. Cardio, Dauer, Hold) in set_logs.",
+      "fields": {
+        "exercise_id": {
+          "name": "Übungs-ID",
+          "description": "Zielübung aus dem Übungskatalog."
+        },
+        "metric_type": {
+          "name": "Metriktyp",
+          "description": "Aktivitätstyp (nicht strength)."
+        },
+        "duration_seconds": {
+          "name": "Dauer (Sekunden)",
+          "description": "Aktivitätsdauer in Sekunden."
+        },
+        "distance_m": {
+          "name": "Distanz (m)",
+          "description": "Distanz in Metern."
+        },
+        "calories": {
+          "name": "Kalorien",
+          "description": "Geschätzter Kalorienverbrauch."
+        },
+        "steps": {
+          "name": "Schritte",
+          "description": "Schrittzahl."
+        },
+        "avg_heart_rate": {
+          "name": "Ø Herzfrequenz",
+          "description": "Durchschnittliche Herzfrequenz."
+        },
+        "max_heart_rate": {
+          "name": "Max. Herzfrequenz",
+          "description": "Maximale Herzfrequenz."
+        },
+        "source": {
+          "name": "Quelle",
+          "description": "Optionale Herkunft des Eintrags."
+        }
+      }
     }
   }
 }

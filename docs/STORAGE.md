@@ -32,7 +32,7 @@ In integration code this is resolved with:
 
 - Schema migrations are tracked in `schema_migrations`.
 - Current version is applied automatically during startup.
-- Current schema version: `6`
+- Current schema version: `7`
 
 ## Recorder and Cloud
 
@@ -171,3 +171,23 @@ Rules:
 - Set volume is always recalculated as `weight * reps`.
 - Datetimes are stored as ISO strings.
 - Deleting workouts does not affect exercise/equipment/muscle-group catalogs.
+
+## Metric Types and Activity Fields (v7)
+
+Schema migration v7 extends the existing tables without creating a second activity table:
+
+- `exercises.metric_type` (`TEXT`, default `strength`)
+- `set_logs.metric_type` (`TEXT`, default `strength`)
+- optional `set_logs` activity columns:
+  - `duration_seconds`, `distance_m`, `calories`, `steps`
+  - `avg_heart_rate`, `max_heart_rate`
+  - `avg_power_watts`, `max_power_watts`, `avg_speed_mps`
+  - `load_score`, `intensity`, `source`
+  - `added_weight`
+
+Compatibility behavior:
+
+- Existing rows stay valid and default to `metric_type='strength'`.
+- Existing strength `volume` values are unchanged.
+- Existing volume-based strength analytics remain compatible because non-strength rows are stored with `volume = 0`.
+- Legacy data is preserved.

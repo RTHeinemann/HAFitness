@@ -95,6 +95,7 @@ This repository provides **Phase 2 (SQLite-backed native persistence)** with:
   - `ha_fitness.add_set_to_workout`
   - `ha_fitness.update_set`
   - `ha_fitness.delete_set`
+  - `ha_fitness.save_activity` (non-strength activity logging)
 - maintenance services: `ha_fitness.refresh_statistics`, `ha_fitness.export_data`
 - Persistent notification on save errors
 - Native dashboard at `dashboards/ha_fitness_native_dashboard.yaml`
@@ -113,6 +114,22 @@ This repository provides **Phase 2 (SQLite-backed native persistence)** with:
 - Older duplicate entities from previous versions can remain in the entity registry as unavailable entries.
   - Remove these in the Home Assistant UI if needed.
   - Do **not** edit `/config/.storage/entity_registry` manually.
+
+### Metric types (Phase 1)
+
+`set_logs` now supports multiple metric types in one table:
+
+- `strength` (existing weight/reps/volume flow)
+- `bodyweight`
+- `duration`
+- `distance`
+- `cardio`
+- `hold`
+- `custom`
+
+Strength analytics remain volume (kg)-based. Non-strength activity rows store optional fields
+like `duration_seconds`, `distance_m`, `calories`, `heart_rate`, and `load_score`, while
+keeping `volume = 0` so existing strength volume analytics stay backward compatible.
 
 ### YAML MVP+ Prototype (still more feature-complete for analytics)
 
@@ -171,6 +188,7 @@ Planned model fields:
 - [`docs/WORKOUT_MANAGEMENT.md`](docs/WORKOUT_MANAGEMENT.md)
 - [`docs/SERVICES.md`](docs/SERVICES.md)
 - [`docs/EXERCISES.md`](docs/EXERCISES.md)
+- [`docs/METRIC_TYPES.md`](docs/METRIC_TYPES.md)
 - [`docs/EQUIPMENT.md`](docs/EQUIPMENT.md)
 - [`docs/MUSCLE_GROUPS.md`](docs/MUSCLE_GROUPS.md)
 - [`docs/HACS_PREPARATION.md`](docs/HACS_PREPARATION.md)

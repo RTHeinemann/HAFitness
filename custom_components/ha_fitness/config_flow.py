@@ -20,6 +20,7 @@ from homeassistant.helpers.selector import (
 )
 
 from .const import (
+    ATTR_METRIC_TYPE,
     ATTR_ENABLED,
     ATTR_DESCRIPTION,
     ATTR_EQUIPMENT,
@@ -39,6 +40,13 @@ from .const import (
     CONF_DISPLAY_NAME,
     CONF_INCLUDED_USER_IDS,
     DEFAULT_DISPLAY_NAME,
+    METRIC_TYPE_BODYWEIGHT,
+    METRIC_TYPE_CARDIO,
+    METRIC_TYPE_CUSTOM,
+    METRIC_TYPE_DISTANCE,
+    METRIC_TYPE_DURATION,
+    METRIC_TYPE_HOLD,
+    METRIC_TYPE_STRENGTH,
     DOMAIN,
 )
 from .storage import HAFitnessStore
@@ -70,6 +78,15 @@ _EQUIPMENT_OPTIONS = [
     "kettlebell",
     "resistance_band",
     "other",
+]
+_METRIC_TYPE_OPTIONS = [
+    METRIC_TYPE_STRENGTH,
+    METRIC_TYPE_BODYWEIGHT,
+    METRIC_TYPE_DURATION,
+    METRIC_TYPE_DISTANCE,
+    METRIC_TYPE_CARDIO,
+    METRIC_TYPE_HOLD,
+    METRIC_TYPE_CUSTOM,
 ]
 
 
@@ -274,6 +291,7 @@ class HAFitnessConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 muscle_group = _optional_str(user_input.get(ATTR_MUSCLE_GROUP))
                 equipment = _optional_str(user_input.get(ATTR_EQUIPMENT))
                 equipment_id = _optional_str(user_input.get(ATTR_EQUIPMENT_ID))
+                metric_type = _optional_str(user_input.get(ATTR_METRIC_TYPE))
                 enabled = bool(user_input.get(ATTR_ENABLED, True))
                 sort_order_raw = user_input.get(ATTR_SORT_ORDER, _DEFAULT_SORT_ORDER)
                 sort_order = _coerce_int(sort_order_raw, _DEFAULT_SORT_ORDER)
@@ -296,6 +314,8 @@ class HAFitnessConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
                 if not name_en:
                     errors[ATTR_NAME_EN] = "name_required"
+                if metric_type is not None and metric_type not in _METRIC_TYPE_OPTIONS:
+                    errors[ATTR_METRIC_TYPE] = "invalid_metric_type"
                 if not _is_valid_sort_order_input(sort_order_raw):
                     errors[ATTR_SORT_ORDER] = "invalid_sort_order"
 
@@ -308,6 +328,7 @@ class HAFitnessConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                             muscle_group=muscle_group,
                             equipment=equipment,
                             equipment_id=equipment_id,
+                            metric_type=metric_type,
                             enabled=enabled,
                             sort_order=sort_order,
                         )
@@ -321,6 +342,7 @@ class HAFitnessConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                             muscle_group=muscle_group,
                             equipment=equipment,
                             equipment_id=equipment_id,
+                            metric_type=metric_type,
                             enabled=enabled,
                             sort_order=sort_order,
                         )
@@ -395,6 +417,18 @@ class HAFitnessConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                             else [],
                             mode="dropdown",
                             custom_value=True,
+                        )
+                    ),
+                    vol.Optional(
+                        ATTR_METRIC_TYPE,
+                        default=str(user_input.get(ATTR_METRIC_TYPE, METRIC_TYPE_STRENGTH))
+                        if user_input
+                        else METRIC_TYPE_STRENGTH,
+                    ): SelectSelector(
+                        SelectSelectorConfig(
+                            options=_selector_options(_METRIC_TYPE_OPTIONS),
+                            mode="dropdown",
+                            custom_value=False,
                         )
                     ),
                     vol.Optional(
@@ -1312,6 +1346,7 @@ class HAFitnessOptionsFlow(config_entries.OptionsFlow):
             muscle_group = _optional_str(user_input.get(ATTR_MUSCLE_GROUP))
             equipment = _optional_str(user_input.get(ATTR_EQUIPMENT))
             equipment_id = _optional_str(user_input.get(ATTR_EQUIPMENT_ID))
+            metric_type = _optional_str(user_input.get(ATTR_METRIC_TYPE))
             enabled = bool(user_input.get(ATTR_ENABLED, True))
             sort_order_raw = user_input.get(ATTR_SORT_ORDER, _DEFAULT_SORT_ORDER)
             sort_order = _coerce_int(sort_order_raw, _DEFAULT_SORT_ORDER)
@@ -1323,6 +1358,8 @@ class HAFitnessOptionsFlow(config_entries.OptionsFlow):
 
             if not name_en:
                 errors[ATTR_NAME_EN] = "name_required"
+            if metric_type is not None and metric_type not in _METRIC_TYPE_OPTIONS:
+                errors[ATTR_METRIC_TYPE] = "invalid_metric_type"
             if not _is_valid_sort_order_input(sort_order_raw):
                 errors[ATTR_SORT_ORDER] = "invalid_sort_order"
 
@@ -1337,6 +1374,7 @@ class HAFitnessOptionsFlow(config_entries.OptionsFlow):
                     muscle_group=muscle_group,
                     equipment=equipment,
                     equipment_id=equipment_id,
+                    metric_type=metric_type,
                     enabled=enabled,
                     sort_order=sort_order,
                 )
@@ -1394,6 +1432,18 @@ class HAFitnessOptionsFlow(config_entries.OptionsFlow):
                             else [],
                             mode="dropdown",
                             custom_value=True,
+                        )
+                    ),
+                    vol.Optional(
+                        ATTR_METRIC_TYPE,
+                        default=str(user_input.get(ATTR_METRIC_TYPE, METRIC_TYPE_STRENGTH))
+                        if user_input
+                        else METRIC_TYPE_STRENGTH,
+                    ): SelectSelector(
+                        SelectSelectorConfig(
+                            options=_selector_options(_METRIC_TYPE_OPTIONS),
+                            mode="dropdown",
+                            custom_value=False,
                         )
                     ),
                     vol.Optional(
@@ -1478,12 +1528,15 @@ class HAFitnessOptionsFlow(config_entries.OptionsFlow):
             muscle_group = _optional_str(user_input.get(ATTR_MUSCLE_GROUP))
             equipment = _optional_str(user_input.get(ATTR_EQUIPMENT))
             equipment_id = _optional_str(user_input.get(ATTR_EQUIPMENT_ID))
+            metric_type = _optional_str(user_input.get(ATTR_METRIC_TYPE))
             enabled = bool(user_input.get(ATTR_ENABLED, True))
             sort_order_raw = user_input.get(ATTR_SORT_ORDER, exercise.get("sort_order", 0))
             sort_order = _coerce_int(sort_order_raw, int(exercise.get("sort_order", 0)))
 
             if not name_en:
                 errors[ATTR_NAME_EN] = "name_required"
+            if metric_type is not None and metric_type not in _METRIC_TYPE_OPTIONS:
+                errors[ATTR_METRIC_TYPE] = "invalid_metric_type"
             if not _is_valid_sort_order_input(sort_order_raw):
                 errors[ATTR_SORT_ORDER] = "invalid_sort_order"
 
@@ -1495,6 +1548,7 @@ class HAFitnessOptionsFlow(config_entries.OptionsFlow):
                     muscle_group=muscle_group,
                     equipment=equipment,
                     equipment_id=equipment_id,
+                    metric_type=metric_type,
                     enabled=enabled,
                     sort_order=sort_order,
                 )
@@ -1564,6 +1618,23 @@ class HAFitnessOptionsFlow(config_entries.OptionsFlow):
                             ),
                             mode="dropdown",
                             custom_value=True,
+                        )
+                    ),
+                    vol.Optional(
+                        ATTR_METRIC_TYPE,
+                        default=str(
+                            user_input.get(
+                                ATTR_METRIC_TYPE,
+                                exercise.get(ATTR_METRIC_TYPE, METRIC_TYPE_STRENGTH),
+                            )
+                        )
+                        if user_input
+                        else str(exercise.get(ATTR_METRIC_TYPE, METRIC_TYPE_STRENGTH)),
+                    ): SelectSelector(
+                        SelectSelectorConfig(
+                            options=_selector_options(_METRIC_TYPE_OPTIONS),
+                            mode="dropdown",
+                            custom_value=False,
                         )
                     ),
                     vol.Optional(

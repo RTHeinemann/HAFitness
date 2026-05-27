@@ -18,6 +18,7 @@ Table: `exercises`
 - `muscle_group` (TEXT, optional)
 - `equipment` (TEXT, optional)
 - `equipment_id` (TEXT, optional, references equipment catalog id)
+- `metric_type` (TEXT, default `strength`)
 - `enabled` (INTEGER, default `1`)
 - `sort_order` (INTEGER, default `0`)
 - `created_at` (TEXT, required)
@@ -82,6 +83,8 @@ Recommendations:
 - Allowed characters: `a-z`, `0-9`, `_`, `-`.
 - In options UI, `-` is normalized to `_`.
 - Keep IDs stable after creation.
+- Set `metric_type` based on exercise nature:
+  - `strength`, `bodyweight`, `duration`, `distance`, `cardio`, `hold`, `custom`
 - Use `sort_order` to control active-exercise select ordering (default: `100`).
 - Use `enabled=false` instead of deleting rows to preserve references.
 
