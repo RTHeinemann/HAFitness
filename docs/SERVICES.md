@@ -57,6 +57,24 @@ This document highlights workout-management services added in v1.
     - rejects `metric_type='strength'` and routes strength logging to set services
     - if `workout_id` is omitted and no active workout exists, creates an implicit completed workout
 
+## Live Activity Button Flow
+
+Besides the explicit `ha_fitness.save_activity` service call, the integration now supports a
+shared live-input button flow:
+
+- fill shared activity input entities (duration, distance, calories, heart-rate, intensity, ...)
+- press `button.ha_fitness_save_activity`
+- coordinator resolves active exercise metric type and validates required fields
+- entry is saved through the same activity backend path
+
+Validation examples:
+
+- strength exercise selected -> blocked with "use save set"
+- duration/hold/cardio -> require duration
+- distance -> require distance
+- bodyweight -> require reps >= 1
+- custom -> require at least one activity field
+
 ## Validation
 
 - `weight >= 0`

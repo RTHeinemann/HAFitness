@@ -59,6 +59,42 @@ Status attributes for dashboards:
 - `confirmation_expires_at`
 - `confirmation_seconds_remaining`
 
+## Activity Input Entities (v1)
+
+Shared global activity entities are available on the main HAGym device:
+
+- `number.ha_fitness_duration_minutes`
+- `number.ha_fitness_distance_km`
+- `number.ha_fitness_calories`
+- `number.ha_fitness_steps`
+- `number.ha_fitness_avg_heart_rate`
+- `number.ha_fitness_max_heart_rate`
+- `number.ha_fitness_added_weight`
+- `select.ha_fitness_intensity`
+- `button.ha_fitness_save_activity`
+
+Behavior:
+
+- values reset on real workout start and finish
+- values reset after successful `save activity`
+- idle equipment/exercise placeholders are never persisted to DB
+
+Example dashboard section:
+
+```yaml
+type: entities
+title: Activity Input
+entities:
+  - entity: select.ha_fitness_active_exercise
+  - entity: number.ha_fitness_duration_minutes
+  - entity: number.ha_fitness_distance_km
+  - entity: number.ha_fitness_calories
+  - entity: number.ha_fitness_avg_heart_rate
+  - entity: number.ha_fitness_max_heart_rate
+  - entity: select.ha_fitness_intensity
+  - entity: button.ha_fitness_save_activity
+```
+
 Example conditional label (template chip/card):
 
 ```jinja2

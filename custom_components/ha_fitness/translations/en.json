@@ -746,6 +746,9 @@
       "save_set": {
         "name": "Save Set"
       },
+      "save_activity": {
+        "name": "Save Activity"
+      },
       "select_equipment": {
         "name": "Select Equipment"
       }
@@ -756,6 +759,9 @@
       },
       "active_equipment": {
         "name": "Active Equipment"
+      },
+      "intensity": {
+        "name": "Intensity"
       }
     },
     "number": {
@@ -764,6 +770,27 @@
       },
       "reps": {
         "name": "Reps"
+      },
+      "duration_minutes": {
+        "name": "Duration"
+      },
+      "distance_km": {
+        "name": "Distance"
+      },
+      "calories": {
+        "name": "Calories"
+      },
+      "steps": {
+        "name": "Steps"
+      },
+      "avg_heart_rate": {
+        "name": "Average heart rate"
+      },
+      "max_heart_rate": {
+        "name": "Max heart rate"
+      },
+      "added_weight": {
+        "name": "Added weight"
       }
     },
     "text": {
@@ -911,9 +938,9 @@
       "name": "Delete Set",
       "description": "Deletes one set by set_id."
     },
-    "save_activity": {
-      "name": "Save Activity",
-      "description": "Saves a non-strength activity entry (for example cardio, duration, hold) into set_logs.",
+      "save_activity": {
+        "name": "Save Activity",
+        "description": "Saves a non-strength activity entry (for example cardio, duration, hold) into set_logs.",
       "fields": {
         "exercise_id": {
           "name": "Exercise ID",
@@ -952,6 +979,26 @@
           "description": "Optional source of the entry."
         }
       }
+    }
+  },
+  "exceptions": {
+    "activity_input": {
+      "message": "Activity input"
+    },
+    "activity_save_error": {
+      "message": "Could not save activity."
+    },
+    "use_save_set_for_strength": {
+      "message": "This exercise is strength-based. Please use Save Set."
+    },
+    "please_enter_duration": {
+      "message": "Please enter a duration."
+    },
+    "please_enter_distance": {
+      "message": "Please enter a distance."
+    },
+    "please_select_exercise": {
+      "message": "Please select an exercise first."
     }
   }
 }

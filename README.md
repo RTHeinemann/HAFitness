@@ -62,8 +62,18 @@ This repository provides **Phase 2 (SQLite-backed native persistence)** with:
 - equipment catalog options UI (add/edit/disable/assign exercises)
 - muscle group catalog options UI (add/edit/disable/assign to exercises)
 - `number.ha_fitness_weight` and `number.ha_fitness_reps` – set input controls
+- shared activity input entities on the main HAGym device:
+  - `number.ha_fitness_duration_minutes`
+  - `number.ha_fitness_distance_km`
+  - `number.ha_fitness_calories`
+  - `number.ha_fitness_steps`
+  - `number.ha_fitness_avg_heart_rate`
+  - `number.ha_fitness_max_heart_rate`
+  - `number.ha_fitness_added_weight`
+  - `select.ha_fitness_intensity`
 - `text.ha_fitness_notes` – optional per-set notes
 - `button.ha_fitness_save_set` – saves the current set with validation
+- `button.ha_fitness_save_activity` – saves non-strength activity entries
 - persisted workouts/sets in `/config/ha_fitness/ha_fitness.db`
 - restored open workout/last set/statistics after Home Assistant restart
 - aggregate sensors: total volume, total sets, total workouts
@@ -130,6 +140,11 @@ This repository provides **Phase 2 (SQLite-backed native persistence)** with:
 Strength analytics remain volume (kg)-based. Non-strength activity rows store optional fields
 like `duration_seconds`, `distance_m`, `calories`, `heart_rate`, and `load_score`, while
 keeping `volume = 0` so existing strength volume analytics stay backward compatible.
+
+Live input flow:
+- strength exercises -> save with `Satz speichern`
+- non-strength exercises -> save with `Aktivität speichern`
+- activity inputs reset on real workout start, real workout finish, and after successful activity save
 
 ### YAML MVP+ Prototype (still more feature-complete for analytics)
 

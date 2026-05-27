@@ -62,6 +62,26 @@ Use existing strength services for strength logging:
 - `ha_fitness.save_set`
 - `ha_fitness.add_set_to_workout`
 
+## Shared Activity Input Entities (v1)
+
+For live dashboard input, HAGym now provides shared activity entities on the main device:
+
+- `number.ha_fitness_duration_minutes`
+- `number.ha_fitness_distance_km`
+- `number.ha_fitness_calories`
+- `number.ha_fitness_steps`
+- `number.ha_fitness_avg_heart_rate`
+- `number.ha_fitness_max_heart_rate`
+- `number.ha_fitness_added_weight`
+- `select.ha_fitness_intensity`
+- `button.ha_fitness_save_activity`
+
+Notes:
+
+- Strength stays on `button.ha_fitness_save_set`.
+- Non-strength metric types use `button.ha_fitness_save_activity`.
+- Activity values are reset after successful activity save and on workout start/finish.
+
 ## Examples
 
 Jogging:

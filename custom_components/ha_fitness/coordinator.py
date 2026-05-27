@@ -20,6 +20,12 @@ from .const import (
     IDLE_EQUIPMENT_ID,
     IDLE_EXERCISE_ID,
     LEGACY_USER_ID,
+    METRIC_TYPE_BODYWEIGHT,
+    METRIC_TYPE_CARDIO,
+    METRIC_TYPE_CUSTOM,
+    METRIC_TYPE_DISTANCE,
+    METRIC_TYPE_DURATION,
+    METRIC_TYPE_HOLD,
     METRIC_TYPE_STRENGTH,
     STATE_ACTIVE,
     STATE_READY,
@@ -54,6 +60,16 @@ _CONFIRM_ACTION_START = "start_workout"
 _CONFIRM_ACTION_FINISH = "finish_workout"
 _STATE_START_CONFIRM = "start_confirm"
 _STATE_FINISH_CONFIRM = "finish_confirm"
+_INTENSITY_LOW = "low"
+_INTENSITY_MODERATE = "moderate"
+_INTENSITY_HARD = "hard"
+_INTENSITY_VERY_HARD = "very_hard"
+_SUPPORTED_INTENSITY_VALUES = {
+    _INTENSITY_LOW,
+    _INTENSITY_MODERATE,
+    _INTENSITY_HARD,
+    _INTENSITY_VERY_HARD,
+}
 
 
 class HAFitnessCoordinator:
@@ -79,6 +95,14 @@ class HAFitnessCoordinator:
         self._weight: float = 0.0
         self._reps: int = 0
         self._notes: str = ""
+        self._duration_minutes: float = 0.0
+        self._distance_km: float = 0.0
+        self._calories: float = 0.0
+        self._steps: int = 0
+        self._avg_heart_rate: float = 0.0
+        self._max_heart_rate: float = 0.0
+        self._added_weight: float = 0.0
+        self._intensity: str = _INTENSITY_MODERATE
         self._current_set_number: int = 0
         self._last_set_summary: str | None = None
         self._last_saved_set: dict[str, Any] | None = None
@@ -215,6 +239,42 @@ class HAFitnessCoordinator:
     @property
     def notes(self) -> str:
         return self._notes
+
+    @property
+    def duration_minutes(self) -> float:
+        return self._duration_minutes
+
+    @property
+    def distance_km(self) -> float:
+        return self._distance_km
+
+    @property
+    def calories(self) -> float:
+        return self._calories
+
+    @property
+    def steps(self) -> int:
+        return self._steps
+
+    @property
+    def avg_heart_rate(self) -> float:
+        return self._avg_heart_rate
+
+    @property
+    def max_heart_rate(self) -> float:
+        return self._max_heart_rate
+
+    @property
+    def added_weight(self) -> float:
+        return self._added_weight
+
+    @property
+    def intensity(self) -> str:
+        return self._intensity
+
+    @property
+    def active_exercise_metric_type(self) -> str:
+        return self.exercise_metric_type(self._active_exercise_id)
 
     @property
     def current_set_number(self) -> int:
@@ -551,6 +611,14 @@ class HAFitnessCoordinator:
         self._weight = 0.0
         self._reps = 0
         self._notes = ""
+        self._duration_minutes = 0.0
+        self._distance_km = 0.0
+        self._calories = 0.0
+        self._steps = 0
+        self._avg_heart_rate = 0.0
+        self._max_heart_rate = 0.0
+        self._added_weight = 0.0
+        self._intensity = _INTENSITY_MODERATE
         for equipment_id in self.enabled_equipment_ids:
             state = self._ensure_equipment_runtime_state(equipment_id)
             state["active_exercise_id"] = None
@@ -750,6 +818,73 @@ class HAFitnessCoordinator:
             state["notes"] = notes
         _LOGGER.debug("HAGym: notes updated")
         self._notify_listeners()
+
+    def set_duration_minutes(self, value: float) -> None:
+        """Update the current activity duration in minutes."""
+        self._duration_minutes = max(0.0, float(value))
+        self._notify_listeners()
+
+    def set_distance_km(self, value: float) -> None:
+        """Update the current activity distance in kilometers."""
+        self._distance_km = max(0.0, float(value))
+        self._notify_listeners()
+
+    def set_calories(self, value: float) -> None:
+        """Update current calories input."""
+        self._calories = max(0.0, float(value))
+        self._notify_listeners()
+
+    def set_steps(self, value: int) -> None:
+        """Update current steps input."""
+        self._steps = max(0, int(value))
+        self._notify_listeners()
+
+    def set_avg_heart_rate(self, value: float) -> None:
+        """Update average heart rate input."""
+        self._avg_heart_rate = max(0.0, float(value))
+        self._notify_listeners()
+
+    def set_max_heart_rate(self, value: float) -> None:
+        """Update max heart rate input."""
+        self._max_heart_rate = max(0.0, float(value))
+        self._notify_listeners()
+
+    def set_added_weight(self, value: float) -> None:
+        """Update added weight input for bodyweight activities."""
+        self._added_weight = max(0.0, float(value))
+        self._notify_listeners()
+
+    def set_intensity(self, value: str) -> None:
+        """Update selected intensity value for cardio activities."""
+        normalized = str(value or "").strip().lower()
+        if normalized not in _SUPPORTED_INTENSITY_VALUES:
+            _LOGGER.warning("HAGym: invalid intensity '%s' ignored", value)
+            return
+        self._intensity = normalized
+        self._notify_listeners()
+
+    def get_activity_required_fields(self) -> list[str]:
+        """Return required fields for the selected exercise metric type."""
+        metric_type = self.active_exercise_metric_type
+        if metric_type in (METRIC_TYPE_DURATION, METRIC_TYPE_HOLD, METRIC_TYPE_CARDIO):
+            return ["duration_minutes"]
+        if metric_type == METRIC_TYPE_DISTANCE:
+            return ["distance_km"]
+        if metric_type == METRIC_TYPE_BODYWEIGHT:
+            return ["reps"]
+        if metric_type == METRIC_TYPE_CUSTOM:
+            return [
+                "duration_minutes|distance_km|calories|steps|reps|added_weight",
+            ]
+        return []
+
+    def activity_input_enabled(self) -> bool:
+        """Return whether activity inputs are currently actionable."""
+        if not self.is_workout_active:
+            return False
+        if not self._active_exercise_id or self._active_exercise_id == IDLE_EXERCISE_ID:
+            return False
+        return self.exercise_metric_type(self._active_exercise_id) != METRIC_TYPE_STRENGTH
 
     def equipment_display_name(self, equipment_id: str) -> str:
         """Return configured equipment display name or fallback to equipment_id."""
@@ -2761,6 +2896,76 @@ class HAFitnessCoordinator:
         self._current_set_number += 1
         self._notify_listeners()
 
+    async def async_save_current_activity(self, context_user_id: str | None = None) -> int:
+        """Save one non-strength activity entry from current runtime inputs."""
+        user_id = await self.resolve_user_id(context_user_id)
+
+        if (
+            self._current_workout_user_id != user_id
+            or self._current_workout_id is None
+            or self._workout_state != STATE_ACTIVE
+        ):
+            open_workout = await self._store.async_get_current_open_workout(user_id)
+            if open_workout is not None:
+                self._current_workout_id = int(open_workout["id"])
+                self._current_workout_started_at = str(open_workout["started_at"])
+                self._current_workout_user_id = user_id
+                self._workout_state = STATE_ACTIVE
+                self._current_set_number = await self._store.async_get_set_count_for_workout(
+                    self._current_workout_id
+                )
+
+        exercise_id = self._active_exercise_id
+        metric_type = self.exercise_metric_type(exercise_id)
+        errors = self._validate_current_activity_inputs(exercise_id=exercise_id, metric_type=metric_type)
+        if errors:
+            message = " ".join(errors)
+            _LOGGER.warning("HAGym async_save_current_activity validation failed: %s", message)
+            self.hass.async_create_task(
+                self.hass.components.persistent_notification.async_create(
+                    message=message,
+                    title="HAGym - Save Activity",
+                    notification_id="ha_fitness_save_activity_error",
+                )
+            )
+            raise HomeAssistantError(message)
+
+        duration_seconds = int(round(self._duration_minutes * 60.0)) if self._duration_minutes > 0 else None
+        distance_m = round(self._distance_km * 1000.0, 3) if self._distance_km > 0 else None
+        equipment_id = self._active_equipment_id
+        if equipment_id == IDLE_EQUIPMENT_ID:
+            equipment_id = None
+
+        set_id = await self.async_save_activity(
+            user_id=user_id,
+            context_user_id=context_user_id,
+            workout_id=self._current_workout_id,
+            equipment_id=equipment_id,
+            exercise_id=exercise_id,  # type: ignore[arg-type]
+            metric_type=metric_type,
+            reps=self._reps if metric_type == METRIC_TYPE_BODYWEIGHT else None,
+            duration_seconds=duration_seconds,
+            distance_m=distance_m,
+            calories=self._calories if self._calories > 0 else None,
+            steps=self._steps if self._steps > 0 else None,
+            avg_heart_rate=self._avg_heart_rate if self._avg_heart_rate > 0 else None,
+            max_heart_rate=self._max_heart_rate if self._max_heart_rate > 0 else None,
+            intensity=self._intensity,
+            notes=self._notes or None,
+            added_weight=self._added_weight if self._added_weight > 0 else None,
+        )
+
+        self._duration_minutes = 0.0
+        self._distance_km = 0.0
+        self._calories = 0.0
+        self._steps = 0
+        self._avg_heart_rate = 0.0
+        self._max_heart_rate = 0.0
+        self._added_weight = 0.0
+        self._intensity = _INTENSITY_MODERATE
+        self._notify_listeners()
+        return set_id
+
     async def save_set(
         self,
         exercise: str,
@@ -3011,6 +3216,84 @@ class HAFitnessCoordinator:
                     "Reps must be at least 1.",
                 )
             )
+        return errors
+
+    def _validate_current_activity_inputs(
+        self,
+        *,
+        exercise_id: str | None,
+        metric_type: str,
+    ) -> list[str]:
+        """Validate live activity inputs and return user-facing error messages."""
+        errors: list[str] = []
+        if not self.is_workout_active or self._current_workout_id is None:
+            errors.append(self._localized_text("Kein aktives Training.", "No active workout."))
+        if not exercise_id or exercise_id == IDLE_EXERCISE_ID:
+            errors.append(
+                self._localized_text(
+                    "Bitte zuerst eine Übung auswählen.",
+                    "Please select an exercise first.",
+                )
+            )
+            return errors
+        if metric_type == METRIC_TYPE_STRENGTH:
+            errors.append(
+                self._localized_text(
+                    "Diese Übung ist eine Kraftübung. Bitte Satz speichern verwenden.",
+                    "This exercise is strength-based. Please use Save Set.",
+                )
+            )
+            return errors
+
+        has_duration = self._duration_minutes > 0
+        has_distance = self._distance_km > 0
+        has_reps = self._reps >= 1
+        has_calories = self._calories > 0
+        has_steps = self._steps > 0
+        has_added_weight = self._added_weight > 0
+
+        if metric_type in (METRIC_TYPE_DURATION, METRIC_TYPE_HOLD, METRIC_TYPE_CARDIO):
+            if not has_duration:
+                errors.append(
+                    self._localized_text(
+                        "Bitte eine Dauer eingeben.",
+                        "Please enter a duration.",
+                    )
+                )
+        elif metric_type == METRIC_TYPE_DISTANCE:
+            if not has_distance:
+                errors.append(
+                    self._localized_text(
+                        "Bitte eine Distanz eingeben.",
+                        "Please enter a distance.",
+                    )
+                )
+        elif metric_type == METRIC_TYPE_BODYWEIGHT:
+            if not has_reps:
+                errors.append(
+                    self._localized_text(
+                        "Wiederholungen müssen mindestens 1 sein.",
+                        "Reps must be at least 1.",
+                    )
+                )
+        elif metric_type == METRIC_TYPE_CUSTOM:
+            if not any(
+                (
+                    has_duration,
+                    has_distance,
+                    has_calories,
+                    has_steps,
+                    has_reps,
+                    has_added_weight,
+                )
+            ):
+                errors.append(
+                    self._localized_text(
+                        "Bitte mindestens ein Aktivitätsfeld ausfüllen.",
+                        "Please provide at least one activity field.",
+                    )
+                )
+
         return errors
 
     async def _persist_set(

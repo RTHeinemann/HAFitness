@@ -167,6 +167,14 @@ class HAFitnessActiveExerciseSensor(_HAFitnessSensorBase):
     def native_value(self) -> str:
         return self._coordinator.active_exercise_display or "none"
 
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return {
+            "active_exercise_id": self._coordinator.active_exercise,
+            "metric_type": self._coordinator.active_exercise_metric_type,
+            "workout_active": self._coordinator.is_workout_active,
+        }
+
 
 class HAFitnessCurrentSetNumberSensor(_HAFitnessSensorBase):
     """Sensor reporting the current set number in the active workout."""
@@ -245,11 +253,20 @@ class HAFitnessActiveWorkoutSummarySensor(_HAFitnessSensorBase):
             "current_workout_started_at": coord.current_workout_started_at,
             "active_exercise": coord.active_exercise_display,
             "active_exercise_id": coord.active_exercise,
+            "active_exercise_metric_type": coord.active_exercise_metric_type,
             "active_equipment": coord.active_equipment_display,
             "active_equipment_id": coord.active_equipment,
             "weight": coord.weight,
             "reps": coord.reps,
             "notes": coord.notes,
+            "duration_minutes": coord.duration_minutes,
+            "distance_km": coord.distance_km,
+            "calories": coord.calories,
+            "steps": coord.steps,
+            "avg_heart_rate": coord.avg_heart_rate,
+            "max_heart_rate": coord.max_heart_rate,
+            "added_weight": coord.added_weight,
+            "intensity": coord.intensity,
             "current_set_number": coord.current_set_number,
             "current_set_volume": coord.weight * coord.reps,
             "last_set_summary": coord.last_set_summary,

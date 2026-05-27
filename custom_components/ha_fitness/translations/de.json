@@ -746,6 +746,9 @@
       "save_set": {
         "name": "Satz speichern"
       },
+      "save_activity": {
+        "name": "Aktivität speichern"
+      },
       "select_equipment": {
         "name": "Equipment auswählen"
       }
@@ -756,6 +759,9 @@
       },
       "active_equipment": {
         "name": "Aktives Equipment"
+      },
+      "intensity": {
+        "name": "Intensität"
       }
     },
     "number": {
@@ -764,6 +770,27 @@
       },
       "reps": {
         "name": "Wiederholungen"
+      },
+      "duration_minutes": {
+        "name": "Dauer"
+      },
+      "distance_km": {
+        "name": "Distanz"
+      },
+      "calories": {
+        "name": "Kalorien"
+      },
+      "steps": {
+        "name": "Schritte"
+      },
+      "avg_heart_rate": {
+        "name": "Durchschnittspuls"
+      },
+      "max_heart_rate": {
+        "name": "Maximalpuls"
+      },
+      "added_weight": {
+        "name": "Zusatzgewicht"
       }
     },
     "text": {
@@ -911,9 +938,9 @@
       "name": "Satz löschen",
       "description": "Löscht einen Satz per set_id."
     },
-    "save_activity": {
-      "name": "Aktivität speichern",
-      "description": "Speichert einen Nicht-Kraft-Trainingseintrag (z. B. Cardio, Dauer, Hold) in set_logs.",
+      "save_activity": {
+        "name": "Aktivität speichern",
+        "description": "Speichert einen Nicht-Kraft-Trainingseintrag (z. B. Cardio, Dauer, Hold) in set_logs.",
       "fields": {
         "exercise_id": {
           "name": "Übungs-ID",
@@ -952,6 +979,26 @@
           "description": "Optionale Herkunft des Eintrags."
         }
       }
+    }
+  },
+  "exceptions": {
+    "activity_input": {
+      "message": "Aktivitätseingabe"
+    },
+    "activity_save_error": {
+      "message": "Aktivität konnte nicht gespeichert werden."
+    },
+    "use_save_set_for_strength": {
+      "message": "Diese Übung ist eine Kraftübung. Bitte Satz speichern verwenden."
+    },
+    "please_enter_duration": {
+      "message": "Bitte eine Dauer eingeben."
+    },
+    "please_enter_distance": {
+      "message": "Bitte eine Distanz eingeben."
+    },
+    "please_select_exercise": {
+      "message": "Bitte zuerst eine Übung auswählen."
     }
   }
 }

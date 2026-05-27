@@ -7,7 +7,13 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN
+from .const import (
+    DOMAIN,
+    METRIC_TYPE_CARDIO,
+    METRIC_TYPE_DISTANCE,
+    METRIC_TYPE_DURATION,
+    METRIC_TYPE_HOLD,
+)
 from .coordinator import HAFitnessCoordinator
 
 
@@ -22,6 +28,7 @@ async def async_setup_entry(
         HAFitnessStartWorkoutButton(coordinator, entry),
         HAFitnessFinishWorkoutButton(coordinator, entry),
         HAFitnessSaveSetButton(coordinator, entry),
+        HAFitnessSaveActivityButton(coordinator, entry),
     ]
     for equipment_id in coordinator.enabled_equipment_ids:
         entities.append(HAFitnessEquipmentSelectButton(coordinator, entry, equipment_id))
@@ -33,9 +40,7 @@ class _HAFitnessButtonBase(ButtonEntity):
 
     _attr_has_entity_name = True
 
-    def __init__(
-        self, coordinator: HAFitnessCoordinator, entry: ConfigEntry
-    ) -> None:
+    def __init__(self, coordinator: HAFitnessCoordinator, entry: ConfigEntry) -> None:
         self._coordinator = coordinator
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
@@ -65,9 +70,7 @@ class HAFitnessStartWorkoutButton(_HAFitnessButtonBase):
 
     _attr_translation_key = "start_workout"
 
-    def __init__(
-        self, coordinator: HAFitnessCoordinator, entry: ConfigEntry
-    ) -> None:
+    def __init__(self, coordinator: HAFitnessCoordinator, entry: ConfigEntry) -> None:
         super().__init__(coordinator, entry)
         self._attr_unique_id = f"{entry.entry_id}_start_workout"
 
@@ -93,9 +96,7 @@ class HAFitnessFinishWorkoutButton(_HAFitnessButtonBase):
 
     _attr_translation_key = "finish_workout"
 
-    def __init__(
-        self, coordinator: HAFitnessCoordinator, entry: ConfigEntry
-    ) -> None:
+    def __init__(self, coordinator: HAFitnessCoordinator, entry: ConfigEntry) -> None:
         super().__init__(coordinator, entry)
         self._attr_unique_id = f"{entry.entry_id}_finish_workout"
 
@@ -121,14 +122,47 @@ class HAFitnessSaveSetButton(_HAFitnessButtonBase):
 
     _attr_translation_key = "save_set"
 
-    def __init__(
-        self, coordinator: HAFitnessCoordinator, entry: ConfigEntry
-    ) -> None:
+    def __init__(self, coordinator: HAFitnessCoordinator, entry: ConfigEntry) -> None:
         super().__init__(coordinator, entry)
         self._attr_unique_id = f"{entry.entry_id}_save_set"
 
     async def async_press(self) -> None:
         await self._coordinator.save_current_set(context_user_id=self._context.user_id)
+
+
+class HAFitnessSaveActivityButton(_HAFitnessButtonBase):
+    """Button to save one non-strength activity from runtime inputs."""
+
+    _attr_translation_key = "save_activity"
+
+    def __init__(self, coordinator: HAFitnessCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{entry.entry_id}_save_activity"
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        metric_type = self._coordinator.active_exercise_metric_type
+        if metric_type in (METRIC_TYPE_DURATION, METRIC_TYPE_HOLD):
+            display_label = self._localize("Dauer speichern", "Save duration")
+        elif metric_type == METRIC_TYPE_CARDIO:
+            display_label = self._localize("Cardio speichern", "Save cardio")
+        elif metric_type == METRIC_TYPE_DISTANCE:
+            display_label = self._localize("Distanz speichern", "Save distance")
+        else:
+            display_label = self._localize("Aktivität speichern", "Save activity")
+
+        return {
+            "active_exercise_id": self._coordinator.active_exercise,
+            "metric_type": metric_type,
+            "input_enabled": self._coordinator.activity_input_enabled(),
+            "required_fields": self._coordinator.get_activity_required_fields(),
+            "display_label": display_label,
+        }
+
+    async def async_press(self) -> None:
+        await self._coordinator.async_save_current_activity(
+            context_user_id=self._context.user_id
+        )
 
 
 class HAFitnessEquipmentSelectButton(ButtonEntity):

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from homeassistant.components.number import NumberEntity, NumberMode
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import UnitOfMass
+from homeassistant.const import UnitOfLength, UnitOfMass
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -22,6 +22,13 @@ async def async_setup_entry(
     entities: list[NumberEntity] = [
         HAFitnessWeightNumber(coordinator, entry),
         HAFitnessRepsNumber(coordinator, entry),
+        HAFitnessDurationMinutesNumber(coordinator, entry),
+        HAFitnessDistanceKmNumber(coordinator, entry),
+        HAFitnessCaloriesNumber(coordinator, entry),
+        HAFitnessStepsNumber(coordinator, entry),
+        HAFitnessAverageHeartRateNumber(coordinator, entry),
+        HAFitnessMaxHeartRateNumber(coordinator, entry),
+        HAFitnessAddedWeightNumber(coordinator, entry),
     ]
     async_add_entities(entities)
 
@@ -98,3 +105,150 @@ class HAFitnessRepsNumber(_HAFitnessNumberBase):
 
     async def async_set_native_value(self, value: float) -> None:
         self._coordinator.set_reps(int(value))
+
+
+class HAFitnessDurationMinutesNumber(_HAFitnessNumberBase):
+    """Number entity for activity duration input in minutes."""
+
+    _attr_translation_key = "duration_minutes"
+    _attr_native_min_value = 0
+    _attr_native_max_value = 600
+    _attr_native_step = 0.5
+    _attr_native_unit_of_measurement = "min"
+
+    def __init__(self, coordinator: HAFitnessCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{entry.entry_id}_duration_minutes"
+
+    @property
+    def native_value(self) -> float:
+        return self._coordinator.duration_minutes
+
+    async def async_set_native_value(self, value: float) -> None:
+        self._coordinator.set_duration_minutes(value)
+
+
+class HAFitnessDistanceKmNumber(_HAFitnessNumberBase):
+    """Number entity for activity distance input in kilometers."""
+
+    _attr_translation_key = "distance_km"
+    _attr_native_min_value = 0
+    _attr_native_max_value = 500
+    _attr_native_step = 0.1
+    _attr_native_unit_of_measurement = UnitOfLength.KILOMETERS
+
+    def __init__(self, coordinator: HAFitnessCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{entry.entry_id}_distance_km"
+
+    @property
+    def native_value(self) -> float:
+        return self._coordinator.distance_km
+
+    async def async_set_native_value(self, value: float) -> None:
+        self._coordinator.set_distance_km(value)
+
+
+class HAFitnessCaloriesNumber(_HAFitnessNumberBase):
+    """Number entity for calories input."""
+
+    _attr_translation_key = "calories"
+    _attr_native_min_value = 0
+    _attr_native_max_value = 5000
+    _attr_native_step = 1
+    _attr_native_unit_of_measurement = "kcal"
+
+    def __init__(self, coordinator: HAFitnessCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{entry.entry_id}_calories"
+
+    @property
+    def native_value(self) -> float:
+        return self._coordinator.calories
+
+    async def async_set_native_value(self, value: float) -> None:
+        self._coordinator.set_calories(value)
+
+
+class HAFitnessStepsNumber(_HAFitnessNumberBase):
+    """Number entity for steps input."""
+
+    _attr_translation_key = "steps"
+    _attr_native_min_value = 0
+    _attr_native_max_value = 100000
+    _attr_native_step = 100
+    _attr_native_unit_of_measurement = "steps"
+
+    def __init__(self, coordinator: HAFitnessCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{entry.entry_id}_steps"
+
+    @property
+    def native_value(self) -> float:
+        return float(self._coordinator.steps)
+
+    async def async_set_native_value(self, value: float) -> None:
+        self._coordinator.set_steps(int(value))
+
+
+class HAFitnessAverageHeartRateNumber(_HAFitnessNumberBase):
+    """Number entity for average heart rate input."""
+
+    _attr_translation_key = "avg_heart_rate"
+    _attr_native_min_value = 0
+    _attr_native_max_value = 240
+    _attr_native_step = 1
+    _attr_native_unit_of_measurement = "bpm"
+
+    def __init__(self, coordinator: HAFitnessCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{entry.entry_id}_avg_heart_rate"
+
+    @property
+    def native_value(self) -> float:
+        return self._coordinator.avg_heart_rate
+
+    async def async_set_native_value(self, value: float) -> None:
+        self._coordinator.set_avg_heart_rate(value)
+
+
+class HAFitnessMaxHeartRateNumber(_HAFitnessNumberBase):
+    """Number entity for maximum heart rate input."""
+
+    _attr_translation_key = "max_heart_rate"
+    _attr_native_min_value = 0
+    _attr_native_max_value = 240
+    _attr_native_step = 1
+    _attr_native_unit_of_measurement = "bpm"
+
+    def __init__(self, coordinator: HAFitnessCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{entry.entry_id}_max_heart_rate"
+
+    @property
+    def native_value(self) -> float:
+        return self._coordinator.max_heart_rate
+
+    async def async_set_native_value(self, value: float) -> None:
+        self._coordinator.set_max_heart_rate(value)
+
+
+class HAFitnessAddedWeightNumber(_HAFitnessNumberBase):
+    """Number entity for optional bodyweight added load."""
+
+    _attr_translation_key = "added_weight"
+    _attr_native_min_value = 0
+    _attr_native_max_value = 300
+    _attr_native_step = 0.5
+    _attr_native_unit_of_measurement = UnitOfMass.KILOGRAMS
+
+    def __init__(self, coordinator: HAFitnessCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{entry.entry_id}_added_weight"
+
+    @property
+    def native_value(self) -> float:
+        return self._coordinator.added_weight
+
+    async def async_set_native_value(self, value: float) -> None:
+        self._coordinator.set_added_weight(value)
