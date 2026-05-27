@@ -60,6 +60,14 @@ class HAFitnessActiveEquipmentSelect(SelectEntity):
     def options(self) -> list[str]:
         return self._coordinator.equipment_options
 
+    @property
+    def extra_state_attributes(self) -> dict[str, bool]:
+        return {
+            "workout_active": self._coordinator.is_workout_active,
+            "input_enabled": self._coordinator.is_workout_active,
+            "selection_required": False,
+        }
+
     async def async_select_option(self, option: str) -> None:
         """Handle equipment selection."""
         self._coordinator.set_active_equipment_option(option)
@@ -101,6 +109,14 @@ class HAFitnessActiveExerciseSelect(SelectEntity):
     @property
     def options(self) -> list[str]:
         return self._coordinator.exercise_options
+
+    @property
+    def extra_state_attributes(self) -> dict[str, bool]:
+        return {
+            "workout_active": self._coordinator.is_workout_active,
+            "input_enabled": self._coordinator.is_workout_active,
+            "selection_required": True,
+        }
 
     async def async_select_option(self, option: str) -> None:
         """Handle option selection."""

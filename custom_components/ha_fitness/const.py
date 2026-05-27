@@ -11,6 +11,10 @@ DEFAULT_DISPLAY_NAME = "HAGym"
 STATE_READY = "ready"
 STATE_ACTIVE = "active"
 
+# Internal idle placeholders for live selects (never persisted)
+IDLE_EQUIPMENT_ID = "__none__"
+IDLE_EXERCISE_ID = "__none__"
+
 # Multi-user defaults
 LEGACY_USER_ID = "legacy"
 LEGACY_USER_NAME = "Legacy / Pre-Multi-User Data"

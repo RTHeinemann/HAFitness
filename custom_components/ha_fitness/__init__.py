@@ -188,10 +188,10 @@ def _register_services(hass: HomeAssistant) -> None:
         errors: list[str] = []
         if not exercise:
             errors.append("Exercise must not be empty.")
-        if weight <= 0:
-            errors.append("Weight must be greater than 0.")
-        if reps <= 0:
-            errors.append("Reps must be greater than 0.")
+        if weight < 0:
+            errors.append("Weight must be >= 0.")
+        if reps < 1:
+            errors.append("Reps must be >= 1.")
 
         if errors:
             message = " ".join(errors)

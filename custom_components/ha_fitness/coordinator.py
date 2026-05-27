@@ -14,7 +14,14 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.event import async_call_later
 
-from .const import EXERCISE_IDS, LEGACY_USER_ID, STATE_ACTIVE, STATE_READY
+from .const import (
+    EXERCISE_IDS,
+    IDLE_EQUIPMENT_ID,
+    IDLE_EXERCISE_ID,
+    LEGACY_USER_ID,
+    STATE_ACTIVE,
+    STATE_READY,
+)
 from .storage import HAFitnessStore
 
 _LOGGER = logging.getLogger(__name__)
@@ -81,6 +88,7 @@ class HAFitnessCoordinator:
         self._exercise_display_to_id: dict[str, str] = {}
         self._exercise_options: list[str] = []
         self._active_equipment_id: str | None = None
+        self._active_equipment_is_idle: bool = True
         self._equipment: list[dict[str, Any]] = []
         self._equipment_by_id: dict[str, dict[str, Any]] = {}
         self._equipment_display_to_id: dict[str, str] = {}
@@ -189,8 +197,8 @@ class HAFitnessCoordinator:
 
     @property
     def active_exercise_display(self) -> str | None:
-        if self._active_exercise_id is None:
-            return None
+        if not self.is_workout_active or self._active_exercise_id is None:
+            return self._idle_exercise_label
         return self.exercise_display_name(self._active_exercise_id)
 
     @property
@@ -259,11 +267,13 @@ class HAFitnessCoordinator:
 
     @property
     def active_equipment_display(self) -> str | None:
+        if not self.is_workout_active or self._active_equipment_is_idle:
+            return self._idle_equipment_label
         if self._active_equipment_id is None:
-            return "All Equipment"
+            return self._all_equipment_label
         row = self._equipment_by_id.get(self._active_equipment_id)
         if row is None:
-            return None
+            return self._idle_equipment_label
         return str(row.get("name") or self._active_equipment_id)
 
     @property
@@ -515,6 +525,37 @@ class HAFitnessCoordinator:
         for listener in list(self._listeners):
             listener()
 
+    @property
+    def _idle_equipment_label(self) -> str:
+        return "Equipment wählen" if self._locale.lower().startswith("de") else "Select equipment"
+
+    @property
+    def _idle_exercise_label(self) -> str:
+        return "Übung wählen" if self._locale.lower().startswith("de") else "Select exercise"
+
+    @property
+    def _all_equipment_label(self) -> str:
+        return "Alle Geräte" if self._locale.lower().startswith("de") else "All Equipment"
+
+    def _localized_text(self, de_text: str, en_text: str) -> str:
+        return de_text if self._locale.lower().startswith("de") else en_text
+
+    def _reset_live_input_state(self) -> None:
+        """Reset live workout input selectors and fields to idle state."""
+        self._active_equipment_id = None
+        self._active_equipment_is_idle = True
+        self._active_exercise_id = None
+        self._weight = 0.0
+        self._reps = 0
+        self._notes = ""
+        for equipment_id in self.enabled_equipment_ids:
+            state = self._ensure_equipment_runtime_state(equipment_id)
+            state["active_exercise_id"] = None
+            state["weight"] = 0.0
+            state["reps"] = 0
+            state["notes"] = ""
+        self._rebuild_exercise_options()
+
     def _set_pending_confirmation(self, action: str) -> None:
         """Set pending two-step confirmation action and schedule expiration."""
         if action not in {_CONFIRM_ACTION_START, _CONFIRM_ACTION_FINISH}:
@@ -592,6 +633,14 @@ class HAFitnessCoordinator:
 
     def set_active_exercise(self, exercise_id: str) -> None:
         """Update the currently selected exercise by stable id."""
+        if not self.is_workout_active:
+            self._active_exercise_id = None
+            self._notify_listeners()
+            return
+        if exercise_id == IDLE_EXERCISE_ID:
+            self._active_exercise_id = None
+            self._notify_listeners()
+            return
         if exercise_id not in self._exercise_by_id:
             _LOGGER.warning("HAGym: unknown exercise_id '%s' ignored", exercise_id)
             return
@@ -604,6 +653,14 @@ class HAFitnessCoordinator:
 
     def set_active_exercise_option(self, option: str) -> None:
         """Set active exercise using localized select option label."""
+        if option == self._idle_exercise_label:
+            self._active_exercise_id = None
+            self._notify_listeners()
+            return
+        if not self.is_workout_active:
+            self._active_exercise_id = None
+            self._notify_listeners()
+            return
         exercise_id = self._exercise_display_to_id.get(option)
         if exercise_id is None:
             _LOGGER.warning("HAGym: unknown exercise option '%s' ignored", option)
@@ -631,14 +688,31 @@ class HAFitnessCoordinator:
             if int(row.get("enabled", 1)) != 1:
                 _LOGGER.warning("HAGym: disabled equipment_id '%s' ignored", equipment_id)
                 return
+        if not self.is_workout_active:
+            self._active_equipment_id = None
+            self._active_equipment_is_idle = True
+            self._active_exercise_id = None
+            self._rebuild_exercise_options()
+            self._notify_listeners()
+            return
         self._active_equipment_id = equipment_id
+        self._active_equipment_is_idle = False
+        if equipment_id is None:
+            self._active_exercise_id = None
         self._rebuild_exercise_options()
         self._sync_global_runtime_from_active_equipment()
         self._notify_listeners()
 
     def set_active_equipment_option(self, option: str) -> None:
         """Set active equipment from select option label."""
-        if option == "All Equipment":
+        if option == self._idle_equipment_label:
+            self._active_equipment_id = None
+            self._active_equipment_is_idle = True
+            self._active_exercise_id = None
+            self._rebuild_exercise_options()
+            self._notify_listeners()
+            return
+        if option == self._all_equipment_label:
             self.set_active_equipment(None)
             return
         equipment_id = self._equipment_display_to_id.get(option)
@@ -910,7 +984,7 @@ class HAFitnessCoordinator:
             )
         )
         self._equipment_display_to_id = {}
-        options = ["All Equipment"]
+        options = [self._idle_equipment_label, self._all_equipment_label]
         for row in enabled_rows:
             equipment_id = str(row["id"])
             display = str(row.get("name") or equipment_id)
@@ -921,6 +995,7 @@ class HAFitnessCoordinator:
 
         if self._active_equipment_id not in self._equipment_by_id:
             self._active_equipment_id = None
+            self._active_equipment_is_idle = True
         self._rebuild_exercise_options()
 
         if notify:
@@ -1978,7 +2053,12 @@ class HAFitnessCoordinator:
             )
         )
 
-        options: list[str] = []
+        options: list[str] = [self._idle_exercise_label]
+        if not self.is_workout_active:
+            self._exercise_options = options
+            self._active_exercise_id = None
+            self._rebuild_equipment_runtime_state()
+            return
         for row in enabled_rows:
             exercise_id = str(row["id"])
             display = self.exercise_display_name(exercise_id)
@@ -1992,9 +2072,7 @@ class HAFitnessCoordinator:
         if self._active_exercise_id is not None and self._active_exercise_id not in [
             str(row["id"]) for row in enabled_rows
         ]:
-            self._active_exercise_id = str(enabled_rows[0]["id"]) if enabled_rows else None
-        if self._active_exercise_id is None and enabled_rows:
-            self._active_exercise_id = str(enabled_rows[0]["id"])
+            self._active_exercise_id = None
 
     def _sync_global_runtime_from_active_equipment(self) -> None:
         if self._active_equipment_id is None:
@@ -2056,12 +2134,14 @@ class HAFitnessCoordinator:
                 self._current_set_number = await self._store.async_get_set_count_for_workout(
                     self._current_workout_id
                 )
+                self._reset_live_input_state()
             else:
                 self._current_workout_id = None
                 self._current_workout_started_at = None
                 self._current_workout_user_id = None
                 self._workout_state = STATE_READY
                 self._current_set_number = 0
+                self._reset_live_input_state()
             self._clear_pending_confirmation(notify=False)
 
             await self.async_refresh_statistics(notify=False)
@@ -2410,9 +2490,10 @@ class HAFitnessCoordinator:
             raise HomeAssistantError("Failed to start workout") from err
 
         self._workout_state = STATE_ACTIVE
+        self._reset_live_input_state()
+        self._active_equipment_is_idle = True
         self._last_set_summary = None
         self._last_saved_set = None
-        self._notes = ""
         await self.async_refresh_statistics(notify=False)
         self._notify_listeners()
 
@@ -2436,7 +2517,10 @@ class HAFitnessCoordinator:
 
         if not workout_is_active_for_user and open_workout is None:
             self._clear_pending_confirmation(notify=False)
+            self._workout_state = STATE_READY
+            self._reset_live_input_state()
             _LOGGER.debug("HAGym: finish_workout ignored (no active workout for %s)", user_id)
+            self._notify_listeners()
             return
 
         if not force and not self._is_pending_confirmation(_CONFIRM_ACTION_FINISH):
@@ -2471,6 +2555,7 @@ class HAFitnessCoordinator:
             self._current_workout_started_at = None
             self._current_workout_user_id = None
             self._current_set_number = 0
+            self._reset_live_input_state()
 
         await self.async_refresh_statistics(notify=False)
         self._notify_listeners()
@@ -2613,7 +2698,7 @@ class HAFitnessCoordinator:
         )
 
         errors = self._validate_set_inputs(
-            exercise_id=exercise_id if exercise_id is not None else exercise.strip(),
+            exercise_id=exercise_id,
             weight=weight,
             reps=reps,
             require_active_workout=False,
@@ -2703,16 +2788,27 @@ class HAFitnessCoordinator:
     ) -> list[str]:
         """Validate set input values and return a list of error messages."""
         errors: list[str] = []
-        if require_active_workout and self._workout_state != STATE_ACTIVE:
-            errors.append("No active workout. Press Start Workout first.")
-        if require_current_workout_id and self._current_workout_id is None:
-            errors.append("No active workout id. Press Start Workout again.")
-        if not exercise_id:
-            errors.append("No exercise selected.")
-        if weight <= 0:
-            errors.append("Weight must be greater than 0.")
-        if reps <= 0:
-            errors.append("Reps must be greater than 0.")
+        no_active_workout = require_active_workout and not self.is_workout_active
+        if no_active_workout:
+            errors.append(self._localized_text("Kein aktives Training.", "No active workout."))
+        if require_current_workout_id and self._current_workout_id is None and not no_active_workout:
+            errors.append(self._localized_text("Kein aktives Training.", "No active workout."))
+        if not exercise_id or exercise_id == IDLE_EXERCISE_ID:
+            errors.append(
+                self._localized_text(
+                    "Bitte zuerst eine Übung auswählen.",
+                    "Please select an exercise first.",
+                )
+            )
+        if weight < 0:
+            errors.append(self._localized_text("Gewicht muss >= 0 sein.", "Weight must be >= 0."))
+        if reps < 1:
+            errors.append(
+                self._localized_text(
+                    "Wiederholungen müssen mindestens 1 sein.",
+                    "Reps must be at least 1.",
+                )
+            )
         return errors
 
     async def _persist_set(
@@ -2728,6 +2824,13 @@ class HAFitnessCoordinator:
         refresh_stats: bool = True,
         selected_equipment_id: str | None = None,
     ) -> None:
+        if not exercise_id or exercise_id == IDLE_EXERCISE_ID:
+            raise HomeAssistantError(
+                self._localized_text(
+                    "Bitte zuerst eine Übung auswählen.",
+                    "Please select an exercise first.",
+                )
+            )
         volume = weight * reps
         created_at = _now_utc()
         resolved_equipment_id = (
@@ -2735,6 +2838,8 @@ class HAFitnessCoordinator:
             if selected_equipment_id is not None
             else self._active_equipment_id or self.get_equipment_for_exercise(exercise_id)
         )
+        if resolved_equipment_id == IDLE_EQUIPMENT_ID:
+            resolved_equipment_id = None
         try:
             set_id = await self._store.async_save_set(
                 user_id=user_id,
@@ -2801,7 +2906,7 @@ class HAFitnessCoordinator:
                 str(prior.get("active_exercise_id")) if prior.get("active_exercise_id") else None
             )
             if active_exercise_id not in valid_exercise_ids:
-                active_exercise_id = valid_exercise_ids[0] if valid_exercise_ids else None
+                active_exercise_id = None
             rebuilt[equipment_id] = {
                 "active_exercise_id": active_exercise_id,
                 "weight": float(prior.get("weight", 0.0)),

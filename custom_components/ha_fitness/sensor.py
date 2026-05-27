@@ -127,6 +127,9 @@ class HAFitnessStatusSensor(_HAFitnessSensorBase):
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         return {
+            "workout_active": self._coordinator.is_workout_active,
+            "input_enabled": self._coordinator.is_workout_active,
+            "selection_required": True,
             "confirmation_action": self._coordinator.pending_confirmation_action,
             "confirmation_expires_at": self._coordinator.pending_confirmation_expires_at,
             "confirmation_seconds_remaining": self._coordinator.confirmation_seconds_remaining,
