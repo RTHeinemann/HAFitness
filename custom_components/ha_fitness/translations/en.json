@@ -810,11 +810,17 @@
       "personal_weekly_volume_history": {
         "name": "Personal weekly volume history"
       },
+      "personal_weekly_metric_history": {
+        "name": "Personal weekly metric history"
+      },
       "personal_training_balance": {
         "name": "Personal Training Balance"
       },
       "household_weekly_summary": {
         "name": "Household Weekly Summary"
+      },
+      "household_weekly_metric_history": {
+        "name": "Household weekly metric history"
       },
       "muscle_group_statistics": {
         "name": "Muscle Group Statistics"

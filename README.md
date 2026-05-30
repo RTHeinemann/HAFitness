@@ -91,8 +91,10 @@ This repository provides **Phase 2 (SQLite-backed native persistence)** with:
   - `sensor.ha_fitness_personal_weekly_exercise_statistics`
   - `sensor.ha_fitness_personal_weekly_muscle_group_statistics`
   - `sensor.ha_fitness_personal_weekly_volume_history` (last 12 weeks in attributes)
+  - `sensor.ha_fitness_personal_weekly_metric_history` (last 12 weeks in attributes)
   - `sensor.ha_fitness_personal_training_balance`
   - `sensor.ha_fitness_household_weekly_summary`
+  - `sensor.ha_fitness_household_weekly_metric_history` (last 12 weeks in attributes)
 - workout management aggregate sensor:
   - `sensor.ha_fitness_personal_recent_workouts`
 - per-muscle-group Home Assistant devices and sensors (enabled groups only)

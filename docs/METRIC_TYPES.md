@@ -52,6 +52,27 @@ Non-strength rows can use optional fields:
 - Non-strength rows are stored with `volume = 0` and therefore do not inflate kg volume totals.
 - PR calculations remain strength-focused.
 
+## Weekly Metric History Sensors
+
+To keep entity count low while supporting metric-type trends, HAGym provides two aggregate history sensors:
+
+- `sensor.ha_fitness_personal_weekly_metric_history`
+- `sensor.ha_fitness_household_weekly_metric_history`
+
+Both expose a 12-week `weeks` list in attributes (current week included) with:
+
+- strength metrics (kg volume, sets, top exercise)
+- bodyweight metrics (reps, load)
+- duration/hold metrics (minutes, load)
+- distance/cardio metrics (km, minutes, calories, steps, heart rate, pace, load)
+- custom metrics (minutes, km, load)
+
+Important:
+
+- `strength_volume_kg` is kept separate from activity `load_score`.
+- `total_activity_load_score` excludes strength kg volume.
+- Rows with missing `metric_type` are treated as `strength` for backward compatibility.
+
 ## Exercise Device Statistics (Metric-Type-Aware)
 
 Exercise devices now expose statistics based on `exercise.metric_type`.

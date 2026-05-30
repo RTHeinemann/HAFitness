@@ -20,8 +20,10 @@ Note:
 - `sensor.ha_fitness_personal_weekly_exercise_statistics`
 - `sensor.ha_fitness_personal_weekly_muscle_group_statistics`
 - `sensor.ha_fitness_personal_weekly_volume_history`
+- `sensor.ha_fitness_personal_weekly_metric_history`
 - `sensor.ha_fitness_personal_training_balance`
 - `sensor.ha_fitness_household_weekly_summary`
+- `sensor.ha_fitness_household_weekly_metric_history`
 
 ## Timeframe
 
@@ -36,6 +38,15 @@ Current week summary sensors:
 - Returns the last 12 weeks (including current week) in one attribute list.
 - Uses weighted muscle-group volume and category buckets (push/pull/legs/core).
 - Keeps entity count low by exposing history as attributes instead of extra entities.
+
+`sensor.ha_fitness_personal_weekly_metric_history` and
+`sensor.ha_fitness_household_weekly_metric_history`:
+
+- Return the last 12 weeks (including current week) as attribute list `weeks`.
+- Track metric-type-aware weekly history across `strength`, `bodyweight`, `duration`,
+  `hold`, `distance`, `cardio`, and `custom`.
+- Keep `strength_volume_kg` separate from activity `load_score`.
+- Empty weeks are returned as zero-filled rows to keep charts stable.
 
 ## Personal vs Household Scope
 
@@ -53,8 +64,116 @@ title: HAGym Weekly Analytics
 entities:
   - entity: sensor.ha_fitness_personal_weekly_summary
   - entity: sensor.ha_fitness_personal_weekly_volume_history
+  - entity: sensor.ha_fitness_personal_weekly_metric_history
   - entity: sensor.ha_fitness_household_weekly_summary
+  - entity: sensor.ha_fitness_household_weekly_metric_history
   - entity: sensor.ha_fitness_personal_training_balance
+```
+
+## Weekly Metric History (ApexCharts, Optional)
+
+### Weekly Activity Load (Stacked)
+
+```yaml
+type: custom:apexcharts-card
+header:
+  show: true
+  title: Wochenlast nach Metrik
+chart_type: bar
+stacked: true
+span:
+  start: week
+series:
+  - entity: sensor.ha_fitness_personal_weekly_metric_history
+    name: Bodyweight
+    type: column
+    data_generator: |
+      return (entity.attributes.weeks || []).map((week) => [new Date(week.week_start).getTime(), week.bodyweight_load_score || 0]);
+  - entity: sensor.ha_fitness_personal_weekly_metric_history
+    name: Duration
+    type: column
+    data_generator: |
+      return (entity.attributes.weeks || []).map((week) => [new Date(week.week_start).getTime(), week.duration_load_score || 0]);
+  - entity: sensor.ha_fitness_personal_weekly_metric_history
+    name: Hold
+    type: column
+    data_generator: |
+      return (entity.attributes.weeks || []).map((week) => [new Date(week.week_start).getTime(), week.hold_load_score || 0]);
+  - entity: sensor.ha_fitness_personal_weekly_metric_history
+    name: Distance
+    type: column
+    data_generator: |
+      return (entity.attributes.weeks || []).map((week) => [new Date(week.week_start).getTime(), week.distance_load_score || 0]);
+  - entity: sensor.ha_fitness_personal_weekly_metric_history
+    name: Cardio
+    type: column
+    data_generator: |
+      return (entity.attributes.weeks || []).map((week) => [new Date(week.week_start).getTime(), week.cardio_load_score || 0]);
+  - entity: sensor.ha_fitness_personal_weekly_metric_history
+    name: Custom
+    type: column
+    data_generator: |
+      return (entity.attributes.weeks || []).map((week) => [new Date(week.week_start).getTime(), week.custom_load_score || 0]);
+```
+
+### Weekly Cardio Overview
+
+```yaml
+type: custom:apexcharts-card
+header:
+  show: true
+  title: Cardio Wochenübersicht
+graph_span: 12w
+series:
+  - entity: sensor.ha_fitness_personal_weekly_metric_history
+    name: Cardio Minuten
+    data_generator: |
+      return (entity.attributes.weeks || []).map((week) => [new Date(week.week_start).getTime(), week.cardio_minutes || 0]);
+  - entity: sensor.ha_fitness_personal_weekly_metric_history
+    name: Cardio km
+    data_generator: |
+      return (entity.attributes.weeks || []).map((week) => [new Date(week.week_start).getTime(), week.cardio_km || 0]);
+  - entity: sensor.ha_fitness_personal_weekly_metric_history
+    name: Kalorien
+    data_generator: |
+      return (entity.attributes.weeks || []).map((week) => [new Date(week.week_start).getTime(), week.cardio_calories || 0]);
+```
+
+### Weekly Distance (Distance + Cardio km)
+
+```yaml
+type: custom:apexcharts-card
+header:
+  show: true
+  title: Distanz pro Woche
+chart_type: bar
+span:
+  start: week
+series:
+  - entity: sensor.ha_fitness_personal_weekly_metric_history
+    name: Distance km
+    type: column
+    data_generator: |
+      return (entity.attributes.weeks || []).map((week) => [new Date(week.week_start).getTime(), (week.distance_km || 0) + (week.cardio_km || 0)]);
+```
+
+### Weekly Total Training (Strength + Activity)
+
+```yaml
+type: markdown
+title: Weekly Total Training
+content: >-
+  {% set m = state_attr('sensor.ha_fitness_personal_weekly_metric_history', 'weeks') or [] %}
+  {% set v = state_attr('sensor.ha_fitness_personal_weekly_volume_history', 'weeks') or [] %}
+  {% set cw_m = m[-1] if m else {} %}
+  {% set cw_v = v[-1] if v else {} %}
+  Aktuelle Woche:  
+  - Strength Volumen: **{{ (cw_m.get('total_strength_volume_kg', 0) | float(0)) | round(1) }} kg**  
+  - Activity Load: **{{ (cw_m.get('total_activity_load_score', 0) | float(0)) | round(1) }} load**  
+  - Minuten: **{{ (cw_m.get('total_minutes', 0) | float(0)) | round(1) }} min**  
+  - Distanz: **{{ (cw_m.get('total_distance_km', 0) | float(0)) | round(2) }} km**  
+  - Kalorien: **{{ (cw_m.get('total_calories', 0) | float(0)) | round(0) }} kcal**  
+  - Push/Pull/Legs (kg): **{{ (cw_v.get('push_volume', 0) | float(0)) | round(1) }} / {{ (cw_v.get('pull_volume', 0) | float(0)) | round(1) }} / {{ (cw_v.get('legs_volume', 0) | float(0)) | round(1) }}**
 ```
 
 ### Top Exercise and Top Muscle (Template)

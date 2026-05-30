@@ -54,8 +54,10 @@ async def async_setup_entry(
         HAFitnessPersonalWeeklyExerciseStatisticsSensor(coordinator, entry),
         HAFitnessPersonalWeeklyMuscleGroupStatisticsSensor(coordinator, entry),
         HAFitnessPersonalWeeklyVolumeHistorySensor(coordinator, entry),
+        HAFitnessPersonalWeeklyMetricHistorySensor(coordinator, entry),
         HAFitnessPersonalTrainingBalanceSensor(coordinator, entry),
         HAFitnessHouseholdWeeklySummarySensor(coordinator, entry),
+        HAFitnessHouseholdWeeklyMetricHistorySensor(coordinator, entry),
         HAFitnessExerciseCatalogSensor(coordinator, entry),
         HAFitnessExerciseStatisticsSensor(coordinator, entry),
         HAFitnessEquipmentCatalogSensor(coordinator, entry),
@@ -635,6 +637,50 @@ class HAFitnessHouseholdWeeklySummarySensor(_HAFitnessSensorBase):
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         return dict(self._coordinator.get_household_weekly_summary())
+
+
+class HAFitnessPersonalWeeklyMetricHistorySensor(_HAFitnessSensorBase):
+    _attr_translation_key = "personal_weekly_metric_history"
+    _attr_native_unit_of_measurement = "load"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(self, coordinator: HAFitnessCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{entry.entry_id}_personal_weekly_metric_history"
+
+    @property
+    def native_value(self) -> float:
+        payload = self._coordinator.get_personal_weekly_metric_history()
+        weeks = list(payload.get("weeks") or [])
+        if not weeks:
+            return 0.0
+        return float(weeks[-1].get("total_load_score", 0.0))
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return dict(self._coordinator.get_personal_weekly_metric_history())
+
+
+class HAFitnessHouseholdWeeklyMetricHistorySensor(_HAFitnessSensorBase):
+    _attr_translation_key = "household_weekly_metric_history"
+    _attr_native_unit_of_measurement = "load"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(self, coordinator: HAFitnessCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{entry.entry_id}_household_weekly_metric_history"
+
+    @property
+    def native_value(self) -> float:
+        payload = self._coordinator.get_household_weekly_metric_history()
+        weeks = list(payload.get("weeks") or [])
+        if not weeks:
+            return 0.0
+        return float(weeks[-1].get("total_load_score", 0.0))
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return dict(self._coordinator.get_household_weekly_metric_history())
 
 
 class HAFitnessExerciseCatalogSensor(_HAFitnessSensorBase):

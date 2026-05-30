@@ -23,7 +23,7 @@ After each create/update/delete action:
 
 - workout history cache is refreshed
 - statistics are recalculated
-- weekly analytics and weekly history update automatically
+- weekly analytics, weekly volume history, and weekly metric history update automatically
 
 ## Sensor
 

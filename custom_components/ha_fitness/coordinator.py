@@ -132,8 +132,10 @@ class HAFitnessCoordinator:
         self._personal_weekly_exercise_statistics: dict[str, Any] = {}
         self._personal_weekly_muscle_group_statistics: dict[str, Any] = {}
         self._personal_weekly_volume_history: dict[str, Any] = {}
+        self._personal_weekly_metric_history: dict[str, Any] = {}
         self._personal_training_balance: dict[str, Any] = {}
         self._household_weekly_summary: dict[str, Any] = {}
+        self._household_weekly_metric_history: dict[str, Any] = {}
         self._recent_workouts: list[dict[str, Any]] = []
         self._recent_workouts_user_id: str | None = None
         self._recent_workouts_limit: int = 20
@@ -490,11 +492,17 @@ class HAFitnessCoordinator:
     def get_personal_weekly_volume_history(self) -> dict[str, Any]:
         return self._personal_weekly_volume_history
 
+    def get_personal_weekly_metric_history(self) -> dict[str, Any]:
+        return self._personal_weekly_metric_history
+
     def get_personal_training_balance(self) -> dict[str, Any]:
         return self._personal_training_balance
 
     def get_household_weekly_summary(self) -> dict[str, Any]:
         return self._household_weekly_summary
+
+    def get_household_weekly_metric_history(self) -> dict[str, Any]:
+        return self._household_weekly_metric_history
 
     def get_recent_workouts(self) -> list[dict[str, Any]]:
         return self._recent_workouts
@@ -1484,6 +1492,11 @@ class HAFitnessCoordinator:
             "last_set_at": household_summary_base.get("last_set_at"),
             "last_workout_at": household_summary_base.get("last_workout_at"),
         }
+        await self.async_refresh_weekly_metric_history(
+            notify=False,
+            personal_user_id=effective_personal_user_id,
+            household_user_ids=effective_household_user_ids,
+        )
 
         if notify:
             self._notify_listeners()
@@ -1566,6 +1579,181 @@ class HAFitnessCoordinator:
             "current_week_end": current_week.get("week_end"),
             "weeks": weeks_payload,
         }
+        if notify:
+            self._notify_listeners()
+
+    async def async_refresh_weekly_metric_history(
+        self,
+        notify: bool = True,
+        *,
+        personal_user_id: str | None = None,
+        household_user_ids: list[str] | None = None,
+    ) -> None:
+        """Refresh personal and household weekly metric-history caches."""
+        effective_personal_user_id = personal_user_id or self._resolve_personal_user_id()
+        effective_household_user_ids = household_user_ids or self._included_user_ids
+        timezone_name, week_ranges = _weekly_ranges(
+            self.hass,
+            weeks=_WEEKLY_HISTORY_DEFAULT_WEEKS,
+            max_weeks=_WEEKLY_HISTORY_MAX_WEEKS,
+        )
+        personal_rows = await self._store.async_get_weekly_metric_history(
+            week_ranges,
+            user_id=effective_personal_user_id,
+        )
+        household_rows = await self._store.async_get_weekly_metric_history(
+            week_ranges,
+            user_ids=effective_household_user_ids,
+        )
+
+        def _localize_row(row: dict[str, Any]) -> dict[str, Any]:
+            week_payload = {
+                "week_start": row.get("week_start"),
+                "week_end": row.get("week_end"),
+                "week_label": row.get("week_label"),
+                "iso_year": int(row.get("iso_year", 0)),
+                "iso_week": int(row.get("iso_week", 0)),
+                "entry_count": int(row.get("entry_count", 0)),
+                "workout_count": int(row.get("workout_count", 0)),
+                "active_days": int(row.get("active_days", 0)),
+                "total_load_score": float(row.get("total_load_score", 0.0)),
+                "strength_volume_kg": float(row.get("strength_volume_kg", 0.0)),
+                "strength_sets": int(row.get("strength_sets", 0)),
+                "strength_exercise_count": int(row.get("strength_exercise_count", 0)),
+                "strength_top_exercise_id": row.get("strength_top_exercise_id"),
+                "strength_top_volume_kg": float(row.get("strength_top_volume_kg", 0.0)),
+                "bodyweight_reps": int(row.get("bodyweight_reps", 0)),
+                "bodyweight_entries": int(row.get("bodyweight_entries", 0)),
+                "bodyweight_load_score": float(row.get("bodyweight_load_score", 0.0)),
+                "bodyweight_top_exercise_id": row.get("bodyweight_top_exercise_id"),
+                "bodyweight_best_reps": int(row.get("bodyweight_best_reps", 0)),
+                "duration_minutes": float(row.get("duration_minutes", 0.0)),
+                "duration_entries": int(row.get("duration_entries", 0)),
+                "duration_load_score": float(row.get("duration_load_score", 0.0)),
+                "duration_top_exercise_id": row.get("duration_top_exercise_id"),
+                "duration_best_minutes": float(row.get("duration_best_minutes", 0.0)),
+                "hold_minutes": float(row.get("hold_minutes", 0.0)),
+                "hold_entries": int(row.get("hold_entries", 0)),
+                "hold_load_score": float(row.get("hold_load_score", 0.0)),
+                "hold_top_exercise_id": row.get("hold_top_exercise_id"),
+                "hold_best_minutes": float(row.get("hold_best_minutes", 0.0)),
+                "distance_km": float(row.get("distance_km", 0.0)),
+                "distance_minutes": float(row.get("distance_minutes", 0.0)),
+                "distance_entries": int(row.get("distance_entries", 0)),
+                "distance_load_score": float(row.get("distance_load_score", 0.0)),
+                "distance_best_km": float(row.get("distance_best_km", 0.0)),
+                "distance_best_pace_min_per_km": float(
+                    row.get("distance_best_pace_min_per_km", 0.0)
+                ),
+                "distance_top_exercise_id": row.get("distance_top_exercise_id"),
+                "cardio_minutes": float(row.get("cardio_minutes", 0.0)),
+                "cardio_km": float(row.get("cardio_km", 0.0)),
+                "cardio_calories": float(row.get("cardio_calories", 0.0)),
+                "cardio_steps": int(row.get("cardio_steps", 0)),
+                "cardio_entries": int(row.get("cardio_entries", 0)),
+                "cardio_load_score": float(row.get("cardio_load_score", 0.0)),
+                "cardio_avg_heart_rate": float(row.get("cardio_avg_heart_rate", 0.0)),
+                "cardio_max_heart_rate": float(row.get("cardio_max_heart_rate", 0.0)),
+                "cardio_best_km": float(row.get("cardio_best_km", 0.0)),
+                "cardio_best_duration_minutes": float(
+                    row.get("cardio_best_duration_minutes", 0.0)
+                ),
+                "cardio_best_pace_min_per_km": float(
+                    row.get("cardio_best_pace_min_per_km", 0.0)
+                ),
+                "cardio_top_exercise_id": row.get("cardio_top_exercise_id"),
+                "custom_entries": int(row.get("custom_entries", 0)),
+                "custom_minutes": float(row.get("custom_minutes", 0.0)),
+                "custom_km": float(row.get("custom_km", 0.0)),
+                "custom_load_score": float(row.get("custom_load_score", 0.0)),
+                "total_minutes": float(row.get("total_minutes", 0.0)),
+                "total_distance_km": float(row.get("total_distance_km", 0.0)),
+                "total_calories": float(row.get("total_calories", 0.0)),
+                "total_steps": int(row.get("total_steps", 0)),
+                "total_reps": int(row.get("total_reps", 0)),
+                "total_entries": int(row.get("total_entries", 0)),
+                "total_strength_volume_kg": float(row.get("total_strength_volume_kg", 0.0)),
+                "total_activity_load_score": float(
+                    row.get("total_activity_load_score", 0.0)
+                ),
+            }
+            week_payload["strength_top_exercise_name"] = self._exercise_name_from_row(
+                {
+                    "exercise_id": row.get("strength_top_exercise_id"),
+                    "name_en": row.get("strength_top_exercise_name_en"),
+                    "name_de": row.get("strength_top_exercise_name_de"),
+                }
+            )
+            week_payload["bodyweight_top_exercise_name"] = self._exercise_name_from_row(
+                {
+                    "exercise_id": row.get("bodyweight_top_exercise_id"),
+                    "name_en": row.get("bodyweight_top_exercise_name_en"),
+                    "name_de": row.get("bodyweight_top_exercise_name_de"),
+                }
+            )
+            week_payload["duration_top_exercise_name"] = self._exercise_name_from_row(
+                {
+                    "exercise_id": row.get("duration_top_exercise_id"),
+                    "name_en": row.get("duration_top_exercise_name_en"),
+                    "name_de": row.get("duration_top_exercise_name_de"),
+                }
+            )
+            week_payload["hold_top_exercise_name"] = self._exercise_name_from_row(
+                {
+                    "exercise_id": row.get("hold_top_exercise_id"),
+                    "name_en": row.get("hold_top_exercise_name_en"),
+                    "name_de": row.get("hold_top_exercise_name_de"),
+                }
+            )
+            week_payload["distance_top_exercise_name"] = self._exercise_name_from_row(
+                {
+                    "exercise_id": row.get("distance_top_exercise_id"),
+                    "name_en": row.get("distance_top_exercise_name_en"),
+                    "name_de": row.get("distance_top_exercise_name_de"),
+                }
+            )
+            week_payload["cardio_top_exercise_name"] = self._exercise_name_from_row(
+                {
+                    "exercise_id": row.get("cardio_top_exercise_id"),
+                    "name_en": row.get("cardio_top_exercise_name_en"),
+                    "name_de": row.get("cardio_top_exercise_name_de"),
+                }
+            )
+            return week_payload
+
+        personal_weeks_payload = [_localize_row(row) for row in personal_rows]
+        personal_current = personal_weeks_payload[-1] if personal_weeks_payload else {}
+        self._personal_weekly_metric_history = {
+            "user_id": effective_personal_user_id,
+            "timezone": timezone_name,
+            "week_count": len(personal_weeks_payload),
+            "current_week_start": personal_current.get("week_start"),
+            "current_week_end": personal_current.get("week_end"),
+            "weeks": personal_weeks_payload,
+        }
+
+        resolved_included_user_ids = (
+            list(effective_household_user_ids)
+            if effective_household_user_ids is not None
+            else [
+                str(row.get("id"))
+                for row in self._users
+                if row.get("id") and _coerce_enabled(row.get("enabled"), default=True)
+            ]
+        )
+        household_weeks_payload = [_localize_row(row) for row in household_rows]
+        household_current = household_weeks_payload[-1] if household_weeks_payload else {}
+        self._household_weekly_metric_history = {
+            "included_user_ids": (
+                resolved_included_user_ids if resolved_included_user_ids else None
+            ),
+            "timezone": timezone_name,
+            "week_count": len(household_weeks_payload),
+            "current_week_start": household_current.get("week_start"),
+            "current_week_end": household_current.get("week_end"),
+            "weeks": household_weeks_payload,
+        }
+
         if notify:
             self._notify_listeners()
 
@@ -2757,6 +2945,7 @@ class HAFitnessCoordinator:
                 "weekly_exercise_statistics": self._personal_weekly_exercise_statistics,
                 "weekly_muscle_group_statistics": self._personal_weekly_muscle_group_statistics,
                 "weekly_volume_history": self._personal_weekly_volume_history,
+                "weekly_metric_history": self._personal_weekly_metric_history,
                 "training_balance": self._personal_training_balance,
                 "exercise_metric_statistics": self._exercise_metric_stats_personal,
             },
@@ -2769,6 +2958,7 @@ class HAFitnessCoordinator:
                 "volume_by_exercise": self._household_volume_by_exercise,
                 "recent_sets": self._household_recent_sets,
                 "weekly_summary": self._household_weekly_summary,
+                "weekly_metric_history": self._household_weekly_metric_history,
                 "exercise_metric_statistics": self._exercise_metric_stats_household,
             },
         }

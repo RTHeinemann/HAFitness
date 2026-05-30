@@ -6,6 +6,7 @@ import logging
 import os
 import sqlite3
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from homeassistant.core import HomeAssistant
 
@@ -773,6 +774,20 @@ class HAFitnessStore:
         """Return per-week personal/household/global volume history rows."""
         return await self._hass.async_add_executor_job(
             self._get_weekly_volume_history,
+            week_ranges,
+            user_id,
+            user_ids,
+        )
+
+    async def async_get_weekly_metric_history(
+        self,
+        week_ranges: list[dict[str, Any]],
+        user_id: str | None = None,
+        user_ids: list[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Return per-week metric-aware history rows for one scope."""
+        return await self._hass.async_add_executor_job(
+            self._get_weekly_metric_history,
             week_ranges,
             user_id,
             user_ids,
@@ -2720,6 +2735,468 @@ class HAFitnessStore:
                 }
             )
         return rows
+
+    def _get_weekly_metric_history(
+        self,
+        week_ranges: list[dict[str, Any]],
+        user_id: str | None,
+        user_ids: list[str] | None,
+    ) -> list[dict[str, Any]]:
+        result: list[dict[str, Any]] = []
+        if not week_ranges:
+            return result
+
+        with self._connect() as conn:
+            scope_sql, scope_params = _scope_filter_sql(user_id, user_ids, "sl.user_id")
+            for week_range in week_ranges:
+                week_start_utc = str(week_range.get("week_start_utc") or "")
+                week_end_utc = str(week_range.get("week_end_utc") or "")
+                if not week_start_utc or not week_end_utc:
+                    continue
+
+                timezone_name = str(week_range.get("timezone") or "UTC")
+                try:
+                    local_tz = ZoneInfo(timezone_name)
+                except Exception:
+                    local_tz = ZoneInfo("UTC")
+
+                rows = conn.execute(
+                    f"""
+                    SELECT
+                        sl.id,
+                        sl.workout_id,
+                        sl.exercise_id,
+                        COALESCE(sl.metric_type, '{DEFAULT_METRIC_TYPE}') AS metric_type,
+                        sl.volume,
+                        sl.reps,
+                        sl.duration_seconds,
+                        sl.distance_m,
+                        sl.calories,
+                        sl.steps,
+                        sl.avg_heart_rate,
+                        sl.max_heart_rate,
+                        sl.load_score,
+                        sl.created_at,
+                        ex.name_en AS exercise_name_en,
+                        ex.name_de AS exercise_name_de
+                    FROM set_logs sl
+                    LEFT JOIN exercises ex ON ex.id = sl.exercise_id
+                    WHERE sl.created_at >= ?
+                      AND sl.created_at < ?
+                      {scope_sql}
+                    ORDER BY sl.created_at ASC, sl.id ASC
+                    """,
+                    (week_start_utc, week_end_utc, *scope_params),
+                ).fetchall()
+
+                entry_count = 0
+                workout_ids: set[int] = set()
+                active_days: set[str] = set()
+
+                strength_volume_kg = 0.0
+                strength_sets = 0
+                strength_exercises: set[str] = set()
+                strength_scores: dict[str, dict[str, Any]] = {}
+
+                bodyweight_reps = 0
+                bodyweight_entries = 0
+                bodyweight_load_score = 0.0
+                bodyweight_best_reps = 0
+                bodyweight_scores: dict[str, dict[str, Any]] = {}
+
+                duration_minutes = 0.0
+                duration_entries = 0
+                duration_load_score = 0.0
+                duration_best_minutes = 0.0
+                duration_scores: dict[str, dict[str, Any]] = {}
+
+                hold_minutes = 0.0
+                hold_entries = 0
+                hold_load_score = 0.0
+                hold_best_minutes = 0.0
+                hold_scores: dict[str, dict[str, Any]] = {}
+
+                distance_km = 0.0
+                distance_minutes = 0.0
+                distance_entries = 0
+                distance_load_score = 0.0
+                distance_best_km = 0.0
+                distance_best_pace_min_per_km = 0.0
+                distance_best_pace_value: float | None = None
+                distance_scores: dict[str, dict[str, Any]] = {}
+
+                cardio_minutes = 0.0
+                cardio_km = 0.0
+                cardio_calories = 0.0
+                cardio_steps = 0
+                cardio_entries = 0
+                cardio_load_score = 0.0
+                cardio_max_heart_rate = 0.0
+                cardio_best_km = 0.0
+                cardio_best_duration_minutes = 0.0
+                cardio_best_pace_min_per_km = 0.0
+                cardio_best_pace_value: float | None = None
+                cardio_scores: dict[str, dict[str, Any]] = {}
+                cardio_hr_weighted_sum = 0.0
+                cardio_hr_weighted_duration = 0.0
+                cardio_hr_simple_sum = 0.0
+                cardio_hr_simple_count = 0
+
+                custom_entries = 0
+                custom_minutes = 0.0
+                custom_km = 0.0
+                custom_load_score = 0.0
+
+                total_minutes = 0.0
+                total_distance_km = 0.0
+                total_calories = 0.0
+                total_steps = 0
+                total_reps = 0
+                total_strength_volume_kg = 0.0
+                total_activity_load_score = 0.0
+                total_load_score = 0.0
+
+                def _to_float(value: Any) -> float:
+                    if value is None:
+                        return 0.0
+                    try:
+                        return float(value)
+                    except (TypeError, ValueError):
+                        return 0.0
+
+                def _to_int(value: Any) -> int:
+                    if value is None:
+                        return 0
+                    try:
+                        return int(value)
+                    except (TypeError, ValueError):
+                        return 0
+
+                def _update_top(
+                    target: dict[str, dict[str, Any]],
+                    exercise_id: str,
+                    exercise_name_en: str | None,
+                    exercise_name_de: str | None,
+                    add_score: float,
+                ) -> None:
+                    if not exercise_id:
+                        return
+                    current = target.get(exercise_id)
+                    if current is None:
+                        target[exercise_id] = {
+                            "score": float(add_score),
+                            "name_en": exercise_name_en,
+                            "name_de": exercise_name_de,
+                        }
+                        return
+                    current["score"] = float(current.get("score", 0.0)) + float(add_score)
+                    if current.get("name_en") is None and exercise_name_en is not None:
+                        current["name_en"] = exercise_name_en
+                    if current.get("name_de") is None and exercise_name_de is not None:
+                        current["name_de"] = exercise_name_de
+
+                for row in rows:
+                    if row is None:
+                        continue
+                    entry_count += 1
+                    exercise_id = str(row["exercise_id"] or "")
+                    metric_type = _normalize_metric_type(row["metric_type"])
+                    volume = _to_float(row["volume"])
+                    reps = _to_int(row["reps"])
+                    duration_seconds = _to_int(row["duration_seconds"])
+                    distance_m = _to_float(row["distance_m"])
+                    calories = _to_float(row["calories"])
+                    steps = _to_int(row["steps"])
+                    avg_heart_rate = _to_float(row["avg_heart_rate"])
+                    max_heart_rate = _to_float(row["max_heart_rate"])
+                    load_score = _to_float(row["load_score"])
+                    exercise_name_en = row["exercise_name_en"]
+                    exercise_name_de = row["exercise_name_de"]
+
+                    total_reps += max(0, reps)
+                    total_load_score += load_score
+                    if metric_type != METRIC_TYPE_STRENGTH:
+                        total_activity_load_score += load_score
+
+                    workout_id = row["workout_id"]
+                    if workout_id is not None:
+                        workout_ids.add(int(workout_id))
+
+                    created_at = _parse_iso_datetime(row["created_at"])
+                    if created_at is not None:
+                        active_days.add(created_at.astimezone(local_tz).date().isoformat())
+
+                    if metric_type == METRIC_TYPE_STRENGTH:
+                        strength_volume_kg += volume
+                        strength_sets += 1
+                        total_strength_volume_kg += volume
+                        if exercise_id:
+                            strength_exercises.add(exercise_id)
+                        _update_top(
+                            strength_scores,
+                            exercise_id,
+                            exercise_name_en,
+                            exercise_name_de,
+                            volume,
+                        )
+                        continue
+
+                    if metric_type == METRIC_TYPE_BODYWEIGHT:
+                        bodyweight_reps += max(0, reps)
+                        bodyweight_entries += 1
+                        bodyweight_load_score += load_score
+                        bodyweight_best_reps = max(bodyweight_best_reps, reps)
+                        top_score = load_score if load_score > 0 else float(max(0, reps))
+                        _update_top(
+                            bodyweight_scores,
+                            exercise_id,
+                            exercise_name_en,
+                            exercise_name_de,
+                            top_score,
+                        )
+                        continue
+
+                    if metric_type == METRIC_TYPE_DURATION:
+                        duration_value = max(0.0, float(duration_seconds) / 60.0)
+                        duration_minutes += duration_value
+                        duration_entries += 1
+                        duration_load_score += load_score
+                        total_minutes += duration_value
+                        duration_best_minutes = max(duration_best_minutes, duration_value)
+                        _update_top(
+                            duration_scores,
+                            exercise_id,
+                            exercise_name_en,
+                            exercise_name_de,
+                            duration_value,
+                        )
+                        continue
+
+                    if metric_type == METRIC_TYPE_HOLD:
+                        hold_value = max(0.0, float(duration_seconds) / 60.0)
+                        hold_minutes += hold_value
+                        hold_entries += 1
+                        hold_load_score += load_score
+                        total_minutes += hold_value
+                        hold_best_minutes = max(hold_best_minutes, hold_value)
+                        _update_top(
+                            hold_scores,
+                            exercise_id,
+                            exercise_name_en,
+                            exercise_name_de,
+                            hold_value,
+                        )
+                        continue
+
+                    if metric_type == METRIC_TYPE_DISTANCE:
+                        distance_value = max(0.0, float(distance_m) / 1000.0)
+                        duration_value = max(0.0, float(duration_seconds) / 60.0)
+                        distance_km += distance_value
+                        distance_minutes += duration_value
+                        distance_entries += 1
+                        distance_load_score += load_score
+                        total_distance_km += distance_value
+                        total_minutes += duration_value
+                        distance_best_km = max(distance_best_km, distance_value)
+                        _update_top(
+                            distance_scores,
+                            exercise_id,
+                            exercise_name_en,
+                            exercise_name_de,
+                            distance_value,
+                        )
+                        if duration_seconds > 0 and distance_m > 0:
+                            pace = (float(duration_seconds) / 60.0) / (
+                                float(distance_m) / 1000.0
+                            )
+                            if distance_best_pace_value is None or pace < distance_best_pace_value:
+                                distance_best_pace_value = pace
+                        continue
+
+                    if metric_type == METRIC_TYPE_CARDIO:
+                        cardio_duration = max(0.0, float(duration_seconds) / 60.0)
+                        cardio_distance = max(0.0, float(distance_m) / 1000.0)
+                        cardio_minutes += cardio_duration
+                        cardio_km += cardio_distance
+                        cardio_calories += max(0.0, calories)
+                        cardio_steps += max(0, steps)
+                        cardio_entries += 1
+                        cardio_load_score += load_score
+                        total_minutes += cardio_duration
+                        total_distance_km += cardio_distance
+                        total_calories += max(0.0, calories)
+                        total_steps += max(0, steps)
+                        cardio_best_km = max(cardio_best_km, cardio_distance)
+                        cardio_best_duration_minutes = max(
+                            cardio_best_duration_minutes, cardio_duration
+                        )
+                        if max_heart_rate > cardio_max_heart_rate:
+                            cardio_max_heart_rate = max_heart_rate
+                        if avg_heart_rate > 0:
+                            if duration_seconds > 0:
+                                cardio_hr_weighted_sum += avg_heart_rate * float(duration_seconds)
+                                cardio_hr_weighted_duration += float(duration_seconds)
+                            else:
+                                cardio_hr_simple_sum += avg_heart_rate
+                                cardio_hr_simple_count += 1
+                        if duration_seconds > 0 and distance_m > 0:
+                            pace = (float(duration_seconds) / 60.0) / (
+                                float(distance_m) / 1000.0
+                            )
+                            if cardio_best_pace_value is None or pace < cardio_best_pace_value:
+                                cardio_best_pace_value = pace
+                        cardio_top_score = (
+                            load_score
+                            if load_score > 0
+                            else (float(duration_seconds) if duration_seconds > 0 else distance_m)
+                        )
+                        _update_top(
+                            cardio_scores,
+                            exercise_id,
+                            exercise_name_en,
+                            exercise_name_de,
+                            cardio_top_score,
+                        )
+                        continue
+
+                    custom_entries += 1
+                    custom_minutes_value = max(0.0, float(duration_seconds) / 60.0)
+                    custom_distance_value = max(0.0, float(distance_m) / 1000.0)
+                    custom_minutes += custom_minutes_value
+                    custom_km += custom_distance_value
+                    custom_load_score += load_score
+                    total_minutes += custom_minutes_value
+                    total_distance_km += custom_distance_value
+
+                def _top_payload(source: dict[str, dict[str, Any]]) -> tuple[str | None, str | None, str | None, float]:
+                    if not source:
+                        return None, None, None, 0.0
+                    exercise_id, data = max(
+                        source.items(),
+                        key=lambda item: (
+                            float(item[1].get("score", 0.0)),
+                            item[0],
+                        ),
+                    )
+                    return (
+                        exercise_id,
+                        data.get("name_en"),
+                        data.get("name_de"),
+                        float(data.get("score", 0.0)),
+                    )
+
+                strength_top_id, strength_top_en, strength_top_de, strength_top_volume = _top_payload(
+                    strength_scores
+                )
+                bodyweight_top_id, bodyweight_top_en, bodyweight_top_de, _ = _top_payload(
+                    bodyweight_scores
+                )
+                duration_top_id, duration_top_en, duration_top_de, _ = _top_payload(
+                    duration_scores
+                )
+                hold_top_id, hold_top_en, hold_top_de, _ = _top_payload(hold_scores)
+                distance_top_id, distance_top_en, distance_top_de, _ = _top_payload(
+                    distance_scores
+                )
+                cardio_top_id, cardio_top_en, cardio_top_de, _ = _top_payload(cardio_scores)
+
+                if cardio_hr_weighted_duration > 0:
+                    cardio_avg_heart_rate = cardio_hr_weighted_sum / cardio_hr_weighted_duration
+                elif cardio_hr_simple_count > 0:
+                    cardio_avg_heart_rate = cardio_hr_simple_sum / float(cardio_hr_simple_count)
+                else:
+                    cardio_avg_heart_rate = 0.0
+
+                distance_best_pace_min_per_km = (
+                    float(distance_best_pace_value)
+                    if distance_best_pace_value is not None
+                    else 0.0
+                )
+                cardio_best_pace_min_per_km = (
+                    float(cardio_best_pace_value) if cardio_best_pace_value is not None else 0.0
+                )
+
+                result.append(
+                    {
+                        "week_start": week_range.get("week_start_local"),
+                        "week_end": week_range.get("week_end_local"),
+                        "week_label": week_range.get("week_label"),
+                        "iso_year": int(week_range.get("iso_year", 0) or 0),
+                        "iso_week": int(week_range.get("iso_week", 0) or 0),
+                        "entry_count": int(entry_count),
+                        "workout_count": len(workout_ids),
+                        "active_days": len(active_days),
+                        "total_load_score": round(total_load_score, 1),
+                        "strength_volume_kg": round(strength_volume_kg, 1),
+                        "strength_sets": int(strength_sets),
+                        "strength_exercise_count": len(strength_exercises),
+                        "strength_top_exercise_id": strength_top_id,
+                        "strength_top_exercise_name_en": strength_top_en,
+                        "strength_top_exercise_name_de": strength_top_de,
+                        "strength_top_volume_kg": round(strength_top_volume, 1),
+                        "bodyweight_reps": int(bodyweight_reps),
+                        "bodyweight_entries": int(bodyweight_entries),
+                        "bodyweight_load_score": round(bodyweight_load_score, 1),
+                        "bodyweight_top_exercise_id": bodyweight_top_id,
+                        "bodyweight_top_exercise_name_en": bodyweight_top_en,
+                        "bodyweight_top_exercise_name_de": bodyweight_top_de,
+                        "bodyweight_best_reps": int(bodyweight_best_reps),
+                        "duration_minutes": round(duration_minutes, 1),
+                        "duration_entries": int(duration_entries),
+                        "duration_load_score": round(duration_load_score, 1),
+                        "duration_top_exercise_id": duration_top_id,
+                        "duration_top_exercise_name_en": duration_top_en,
+                        "duration_top_exercise_name_de": duration_top_de,
+                        "duration_best_minutes": round(duration_best_minutes, 1),
+                        "hold_minutes": round(hold_minutes, 1),
+                        "hold_entries": int(hold_entries),
+                        "hold_load_score": round(hold_load_score, 1),
+                        "hold_top_exercise_id": hold_top_id,
+                        "hold_top_exercise_name_en": hold_top_en,
+                        "hold_top_exercise_name_de": hold_top_de,
+                        "hold_best_minutes": round(hold_best_minutes, 1),
+                        "distance_km": round(distance_km, 2),
+                        "distance_minutes": round(distance_minutes, 1),
+                        "distance_entries": int(distance_entries),
+                        "distance_load_score": round(distance_load_score, 1),
+                        "distance_best_km": round(distance_best_km, 2),
+                        "distance_best_pace_min_per_km": round(
+                            distance_best_pace_min_per_km, 2
+                        ),
+                        "distance_top_exercise_id": distance_top_id,
+                        "distance_top_exercise_name_en": distance_top_en,
+                        "distance_top_exercise_name_de": distance_top_de,
+                        "cardio_minutes": round(cardio_minutes, 1),
+                        "cardio_km": round(cardio_km, 2),
+                        "cardio_calories": round(cardio_calories, 1),
+                        "cardio_steps": int(cardio_steps),
+                        "cardio_entries": int(cardio_entries),
+                        "cardio_load_score": round(cardio_load_score, 1),
+                        "cardio_avg_heart_rate": round(cardio_avg_heart_rate, 1),
+                        "cardio_max_heart_rate": round(cardio_max_heart_rate, 1),
+                        "cardio_best_km": round(cardio_best_km, 2),
+                        "cardio_best_duration_minutes": round(
+                            cardio_best_duration_minutes, 1
+                        ),
+                        "cardio_best_pace_min_per_km": round(cardio_best_pace_min_per_km, 2),
+                        "cardio_top_exercise_id": cardio_top_id,
+                        "cardio_top_exercise_name_en": cardio_top_en,
+                        "cardio_top_exercise_name_de": cardio_top_de,
+                        "custom_entries": int(custom_entries),
+                        "custom_minutes": round(custom_minutes, 1),
+                        "custom_km": round(custom_km, 2),
+                        "custom_load_score": round(custom_load_score, 1),
+                        "total_minutes": round(total_minutes, 1),
+                        "total_distance_km": round(total_distance_km, 2),
+                        "total_calories": round(total_calories, 1),
+                        "total_steps": int(total_steps),
+                        "total_reps": int(total_reps),
+                        "total_entries": int(entry_count),
+                        "total_strength_volume_kg": round(total_strength_volume_kg, 1),
+                        "total_activity_load_score": round(total_activity_load_score, 1),
+                    }
+                )
+        return result
 
     def _get_household_total_volume(self, user_ids: list[str] | None) -> float:
         with self._connect() as conn:
