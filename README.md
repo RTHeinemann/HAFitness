@@ -116,6 +116,10 @@ This repository provides **Phase 2 (SQLite-backed native persistence)** with:
 - maintenance services: `ha_fitness.refresh_statistics`, `ha_fitness.export_data`
 - Persistent notification on save errors
 - Native dashboard at `dashboards/ha_fitness_native_dashboard.yaml`
+- Optional custom Lovelace cards (Energy-inspired period selection pattern):
+  - `custom:hagym-date-selection`
+  - `custom:hagym-period-dashboard-card`
+  - files in `/config/custom_components/ha_fitness/www/`
 
 ### Device model (Phase 2.7)
 
@@ -215,6 +219,7 @@ Planned model fields:
 - [`docs/SQLITE_MIGRATION.md`](docs/SQLITE_MIGRATION.md)
 - [`docs/STORAGE.md`](docs/STORAGE.md)
 - [`docs/ANALYTICS.md`](docs/ANALYTICS.md)
+- [`docs/DASHBOARD.md`](docs/DASHBOARD.md)
 - [`docs/WORKOUT_MANAGEMENT.md`](docs/WORKOUT_MANAGEMENT.md)
 - [`docs/SERVICES.md`](docs/SERVICES.md)
 - [`docs/EXERCISES.md`](docs/EXERCISES.md)

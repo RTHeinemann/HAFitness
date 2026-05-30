@@ -308,3 +308,61 @@ entities:
         ended_at: "2026-05-26T09:00:00+02:00"
         status: "completed"
 ```
+
+## Custom Lovelace Cards (Energy-Inspired Pattern)
+
+HAGym uses two separate cards:
+
+- `custom:hagym-date-selection` (reusable period selector)
+- `custom:hagym-period-dashboard-card` (analytics dashboard consuming selected period)
+
+Resources:
+
+```yaml
+resources:
+  - url: /hacsfiles/ha_fitness/hagym-date-selection-card.js
+    type: module
+  - url: /hacsfiles/ha_fitness/hagym-period-dashboard-card.js
+    type: module
+```
+
+Alternative path if your setup serves from `/local/community`:
+
+```yaml
+resources:
+  - url: /local/community/ha_fitness/hagym-date-selection-card.js
+    type: module
+  - url: /local/community/ha_fitness/hagym-period-dashboard-card.js
+    type: module
+```
+
+Embedded selector:
+
+```yaml
+type: custom:hagym-period-dashboard-card
+metric_history_entity: sensor.ha_fitness_personal_weekly_metric_history
+volume_history_entity: sensor.ha_fitness_personal_weekly_volume_history
+show_embedded_date_selection: true
+collection_key: hagym
+```
+
+Separate selector + dashboard:
+
+```yaml
+type: vertical-stack
+cards:
+  - type: custom:hagym-period-dashboard-card
+    metric_history_entity: sensor.ha_fitness_personal_weekly_metric_history
+    volume_history_entity: sensor.ha_fitness_personal_weekly_volume_history
+    show_embedded_date_selection: false
+    collection_key: hagym
+  - type: custom:hagym-date-selection
+    collection_key: hagym
+    opening_direction: right
+    vertical_opening_direction: up
+```
+
+Notes:
+
+- The selector is inspired by Home Assistant Energy UX, but does not import Energy internals.
+- Periods like `last_7_days` / `last_30_days` are approximated from weekly buckets in v1.
